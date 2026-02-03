@@ -96,6 +96,15 @@ export function App() {
   const [isWorking, setIsWorking] = useState(false);
 
   const handleOpenManager = async () => {
+    setStatus(null);
+    try {
+      await openManagerTab();
+    } catch (err) {
+      setStatus(err instanceof Error ? err.message : 'Failed to open tab manager.');
+    }
+  };
+
+  const handleSaveAndOpenManager = async () => {
     setIsWorking(true);
     setStatus('Saving current tabs...');
     try {
@@ -170,7 +179,15 @@ export function App() {
           onClick={handleOpenManager}
           disabled={isWorking}
         >
-          {isWorking ? 'Working...' : 'Open tab manager'}
+          Open tab manager
+        </button>
+        <button
+          className="secondary-button"
+          type="button"
+          onClick={handleSaveAndOpenManager}
+          disabled={isWorking}
+        >
+          {isWorking ? 'Working...' : 'Save & close tabs'}
         </button>
         {status ? <p className="popup__hint">{status}</p> : null}
       </main>

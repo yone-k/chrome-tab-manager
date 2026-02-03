@@ -6,7 +6,7 @@ import {
   GROUP_FILTER_ALL,
   GROUP_FILTER_UNGROUPED,
 } from '../tab-manager/filters';
-import { getState, updateState } from '../tab-manager/storage';
+import { getState, STATE_KEY, updateState } from '../tab-manager/storage';
 import type { GroupSnapshot, HistorySet, TabSnapshot } from '../tab-manager/types';
 import { cleanupHistorySet } from './restoreCleanup';
 import { createTabRowActions } from './tabRowActions';
@@ -156,8 +156,19 @@ export function ManagerApp() {
       }
     }
     load();
+    const handleChange = (
+      changes: { [key: string]: chrome.storage.StorageChange },
+      areaName: string,
+    ) => {
+      if (areaName !== 'local' || !changes[STATE_KEY]) {
+        return;
+      }
+      load();
+    };
+    chrome.storage.onChanged.addListener(handleChange);
     return () => {
       cancelled = true;
+      chrome.storage.onChanged.removeListener(handleChange);
     };
   }, []);
 
