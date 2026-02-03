@@ -8,6 +8,7 @@ type StatusState = 'idle' | 'saving' | 'saved' | 'error';
 
 export function OptionsApp() {
   const [exclusionsText, setExclusionsText] = useState('');
+  const [restoreLoadingSuppressionEnabled, setRestoreLoadingSuppressionEnabled] = useState(true);
   const [removeRestoredTabsEnabled, setRemoveRestoredTabsEnabled] = useState(true);
   const [status, setStatus] = useState<StatusState>('idle');
   const [error, setError] = useState<string | null>(null);
@@ -21,6 +22,7 @@ export function OptionsApp() {
           return;
         }
         setExclusionsText(stored.exclusions.join('\n'));
+        setRestoreLoadingSuppressionEnabled(stored.restoreLoadingSuppressionEnabled);
         setRemoveRestoredTabsEnabled(stored.removeRestoredTabsEnabled);
       } catch (err) {
         if (!cancelled) {
@@ -42,6 +44,7 @@ export function OptionsApp() {
       await updateState((state) => ({
         ...state,
         exclusions: normalized,
+        restoreLoadingSuppressionEnabled,
         removeRestoredTabsEnabled,
       }));
       setExclusionsText(normalized.join('\n'));
@@ -60,9 +63,11 @@ export function OptionsApp() {
       await updateState((state) => ({
         ...state,
         exclusions: normalized,
+        restoreLoadingSuppressionEnabled: true,
         removeRestoredTabsEnabled: true,
       }));
       setExclusionsText(normalized.join('\n'));
+      setRestoreLoadingSuppressionEnabled(true);
       setRemoveRestoredTabsEnabled(true);
       setStatus('saved');
     } catch (err) {
@@ -94,15 +99,26 @@ export function OptionsApp() {
           rows={10}
           spellCheck={false}
         />
-        <label className="options__toggle">
-          <input
-            className="options__toggle-input"
-            type="checkbox"
-            checked={removeRestoredTabsEnabled}
-            onChange={(event) => setRemoveRestoredTabsEnabled(event.target.checked)}
-          />
-          <span className="options__toggle-label">復元したタブを履歴から削除する</span>
-        </label>
+        <div className="options__toggles">
+          <label className="options__toggle">
+            <input
+              className="options__toggle-input"
+              type="checkbox"
+              checked={restoreLoadingSuppressionEnabled}
+              onChange={(event) => setRestoreLoadingSuppressionEnabled(event.target.checked)}
+            />
+            <span className="options__toggle-label">タブ復元時の読み込みを抑制</span>
+          </label>
+          <label className="options__toggle">
+            <input
+              className="options__toggle-input"
+              type="checkbox"
+              checked={removeRestoredTabsEnabled}
+              onChange={(event) => setRemoveRestoredTabsEnabled(event.target.checked)}
+            />
+            <span className="options__toggle-label">復元したタブを履歴から削除する</span>
+          </label>
+        </div>
         <div className="options__actions">
           <button className="primary-button" type="button" onClick={handleSave}>
             Save

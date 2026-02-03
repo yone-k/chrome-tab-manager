@@ -9,6 +9,7 @@ import {
 import { getState, STATE_KEY, updateState } from '../tab-manager/storage';
 import type { GroupSnapshot, HistorySet, TabSnapshot } from '../tab-manager/types';
 import { cleanupHistorySet } from './restoreCleanup';
+import { shouldSuppressRestoreLoading } from './restorePolicy';
 import { createTabRowActions } from './tabRowActions';
 import './manager.css';
 
@@ -57,6 +58,70 @@ async function createTab(windowId: number, url: string) {
   });
 }
 
+async function discardTab(tabId: number) {
+  return new Promise<void>((resolve) => {
+    chrome.tabs.discard(tabId, () => {
+      if (chrome.runtime.lastError) {
+        console.error('Failed to discard tab', chrome.runtime.lastError);
+      }
+      resolve();
+    });
+  });
+}
+
+function matchesExpectedUrl(
+  expectedUrl: string,
+  tab: chrome.tabs.Tab,
+  changeInfo?: chrome.tabs.TabChangeInfo,
+) {
+  const candidates = [changeInfo?.url, tab.url].filter((value): value is string => Boolean(value));
+
+  return candidates.some((value) => value === expectedUrl);
+}
+
+async function waitForTabUrl(tabId: number, expectedUrl: string, timeoutMs = 1000) {
+  return new Promise<boolean>((resolve) => {
+    let settled = false;
+    const finish = (matched: boolean) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearTimeout(timeoutId);
+      chrome.tabs.onUpdated.removeListener(handleUpdated);
+      resolve(matched);
+    };
+
+    const handleUpdated = (
+      updatedTabId: number,
+      changeInfo: chrome.tabs.TabChangeInfo,
+      tab: chrome.tabs.Tab,
+    ) => {
+      if (updatedTabId !== tabId) {
+        return;
+      }
+      if (matchesExpectedUrl(expectedUrl, tab, changeInfo)) {
+        finish(true);
+      }
+    };
+
+    const timeoutId = setTimeout(() => {
+      console.error('Discard wait timeout reached', { tabId, expectedUrl });
+      finish(false);
+    }, timeoutMs);
+
+    chrome.tabs.onUpdated.addListener(handleUpdated);
+    chrome.tabs.get(tabId, (tab) => {
+      if (chrome.runtime.lastError || !tab) {
+        return;
+      }
+      if (matchesExpectedUrl(expectedUrl, tab)) {
+        finish(true);
+      }
+    });
+  });
+}
+
 async function groupTabs(windowId: number, tabIds: number[]) {
   return new Promise<number>((resolve, reject) => {
     chrome.tabs.group({ createProperties: { windowId }, tabIds }, (groupId: number) => {
@@ -93,9 +158,18 @@ async function moveTabGroup(groupId: number, index: number) {
   });
 }
 
-async function restoreTabs(tabs: TabSnapshot[], groups: GroupSnapshot[], windowId: number) {
+async function restoreTabs(
+  tabs: TabSnapshot[],
+  groups: GroupSnapshot[],
+  windowId: number,
+  restoreLoadingSuppressionEnabled: boolean,
+) {
   const sortedTabs = [...tabs].sort((a, b) => a.index - b.index);
   const createdTabs: Array<{ snapshot: TabSnapshot; tab: chrome.tabs.Tab }> = [];
+  const shouldDiscard = shouldSuppressRestoreLoading({
+    enabled: restoreLoadingSuppressionEnabled,
+    tabCount: sortedTabs.length,
+  });
 
   for (const tab of sortedTabs) {
     const created = await createTab(windowId, tab.url);
@@ -118,14 +192,53 @@ async function restoreTabs(tabs: TabSnapshot[], groups: GroupSnapshot[], windowI
     if (!tabIds || tabIds.length === 0) {
       continue;
     }
-    const newGroupId = await groupTabs(windowId, tabIds);
-    await updateTabGroup(newGroupId, group);
+    let newGroupId: number | null = null;
+    try {
+      newGroupId = await groupTabs(windowId, tabIds);
+    } catch (err) {
+      console.error('Failed to create tab group', err);
+      continue;
+    }
+    try {
+      await updateTabGroup(newGroupId, group);
+    } catch (err) {
+      console.error('Failed to update tab group', err);
+    }
     try {
       await moveTabGroup(newGroupId, group.index);
-    } catch {
-      // ignore move failures (e.g. index out of range)
+    } catch (err) {
+      console.error('Failed to move tab group', err);
     }
   }
+
+  if (shouldDiscard) {
+    const results = await Promise.all(
+      createdTabs.map(async ({ snapshot, tab }) => {
+        if (tab.id === undefined) {
+          return { snapshot, restored: false };
+        }
+        const matched = await waitForTabUrl(tab.id, snapshot.url);
+        if (!matched) {
+          console.error('Failed to confirm tab url before discard', {
+            tabId: tab.id,
+            expectedUrl: snapshot.url,
+          });
+          return { snapshot, restored: false };
+        }
+        await discardTab(tab.id);
+        return { snapshot, restored: true };
+      }),
+    );
+    const restoredTabs = results
+      .filter((result) => result.restored)
+      .map((result) => result.snapshot);
+    const failedTabs = results
+      .filter((result) => !result.restored)
+      .map((result) => result.snapshot);
+    return { restoredTabs, failedTabs };
+  }
+
+  return { restoredTabs: sortedTabs, failedTabs: [] };
 }
 
 export function ManagerApp() {
@@ -134,6 +247,7 @@ export function ManagerApp() {
     status: LoadState;
     data?: HistorySet[];
     error?: string;
+    restoreLoadingSuppressionEnabled?: boolean;
     removeRestoredTabsEnabled?: boolean;
   }>({ status: 'loading' });
   const [query, setQuery] = useState('');
@@ -151,6 +265,7 @@ export function ManagerApp() {
         setState({
           status: 'ready',
           data: stored.historySets,
+          restoreLoadingSuppressionEnabled: stored.restoreLoadingSuppressionEnabled,
           removeRestoredTabsEnabled: stored.removeRestoredTabsEnabled,
         });
       } catch (err) {
@@ -199,10 +314,12 @@ export function ManagerApp() {
     setState((current) => ({
       status: 'ready',
       data: nextSets,
+      restoreLoadingSuppressionEnabled: current.restoreLoadingSuppressionEnabled ?? true,
       removeRestoredTabsEnabled: current.removeRestoredTabsEnabled ?? true,
     }));
   };
 
+  const restoreLoadingSuppressionEnabled = state.restoreLoadingSuppressionEnabled ?? true;
   const removeRestoredTabsEnabled = state.removeRestoredTabsEnabled ?? true;
 
   const handleDeleteSet = async (setId: string) => {
@@ -241,7 +358,12 @@ export function ManagerApp() {
     try {
       const targetSet = fullSets.find((item) => item.id === set.id) ?? set;
       const windowId = await getCurrentWindowId();
-      await restoreTabs(targetSet.tabs, targetSet.groups, windowId);
+      const { restoredTabs, failedTabs } = await restoreTabs(
+        targetSet.tabs,
+        targetSet.groups,
+        windowId,
+        restoreLoadingSuppressionEnabled,
+      );
       if (removeRestoredTabsEnabled) {
         const updated = await updateState((current) => ({
           ...current,
@@ -250,14 +372,19 @@ export function ManagerApp() {
               if (item.id !== targetSet.id) {
                 return item;
               }
-              return cleanupHistorySet(item, targetSet.tabs);
+              return cleanupHistorySet(item, restoredTabs);
             })
             .filter((item): item is HistorySet => item !== null),
         }));
         await refreshState(updated.historySets);
       }
-      setActionMessage('Tabs restored.');
+      if (failedTabs.length > 0) {
+        setActionMessage(`Restored ${restoredTabs.length} of ${targetSet.tabs.length} tabs.`);
+      } else {
+        setActionMessage('Tabs restored.');
+      }
     } catch (err) {
+      console.error('Failed to restore tabs', err);
       setActionMessage(
         err instanceof Error ? err.message : 'Failed to restore tabs. Please try again.',
       );
@@ -274,7 +401,12 @@ export function ManagerApp() {
     try {
       const windowId = await getCurrentWindowId();
       const tabs = targetSet.tabs.filter((tab) => tab.groupId === groupId);
-      await restoreTabs(tabs, [group], windowId);
+      const { restoredTabs, failedTabs } = await restoreTabs(
+        tabs,
+        [group],
+        windowId,
+        restoreLoadingSuppressionEnabled,
+      );
       if (removeRestoredTabsEnabled) {
         const updated = await updateState((current) => ({
           ...current,
@@ -283,14 +415,19 @@ export function ManagerApp() {
               if (item.id !== targetSet.id) {
                 return item;
               }
-              return cleanupHistorySet(item, tabs);
+              return cleanupHistorySet(item, restoredTabs);
             })
             .filter((item): item is HistorySet => item !== null),
         }));
         await refreshState(updated.historySets);
       }
-      setActionMessage('Group restored.');
+      if (failedTabs.length > 0) {
+        setActionMessage(`Restored ${restoredTabs.length} of ${tabs.length} tabs.`);
+      } else {
+        setActionMessage('Group restored.');
+      }
     } catch (err) {
+      console.error('Failed to restore group', err);
       setActionMessage(err instanceof Error ? err.message : 'Failed to restore group.');
     }
   };
@@ -299,18 +436,28 @@ export function ManagerApp() {
     setActionMessage('Restoring tab...');
     try {
       const windowId = await getCurrentWindowId();
-      await restoreTabs([tab], [], windowId);
+      const { restoredTabs } = await restoreTabs(
+        [tab],
+        [],
+        windowId,
+        restoreLoadingSuppressionEnabled,
+      );
       if (removeRestoredTabsEnabled) {
         const updated = await updateState((current) => ({
           ...current,
           historySets: current.historySets
-            .map((item) => cleanupHistorySet(item, [tab]))
+            .map((item) => cleanupHistorySet(item, restoredTabs))
             .filter((item): item is HistorySet => item !== null),
         }));
         await refreshState(updated.historySets);
       }
-      setActionMessage('Tab restored.');
+      if (restoredTabs.length === 1) {
+        setActionMessage('Tab restored.');
+      } else {
+        setActionMessage('Failed to restore tab.');
+      }
     } catch (err) {
+      console.error('Failed to restore tab', err);
       setActionMessage(err instanceof Error ? err.message : 'Failed to restore tab.');
     }
   };

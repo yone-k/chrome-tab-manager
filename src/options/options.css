@@ -76,6 +76,11 @@ body {
   resize: vertical;
 }
 
+.options__toggles {
+  display: grid;
+  gap: 8px;
+}
+
 .options__toggle {
   display: flex;
   align-items: center;

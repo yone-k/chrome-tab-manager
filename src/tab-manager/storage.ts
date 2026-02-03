@@ -13,6 +13,7 @@ export function getDefaultState(): TabManagerState {
     version: 1,
     historySets: [],
     exclusions: normalizeExclusions(DEFAULT_EXCLUSIONS),
+    restoreLoadingSuppressionEnabled: true,
     removeRestoredTabsEnabled: true,
   };
 }
@@ -50,6 +51,10 @@ function coerceState(raw: unknown): TabManagerState {
     exclusions: normalizeExclusions(
       Array.isArray(raw.exclusions) ? raw.exclusions.map(String) : defaults.exclusions,
     ),
+    restoreLoadingSuppressionEnabled:
+      typeof raw.restoreLoadingSuppressionEnabled === 'boolean'
+        ? raw.restoreLoadingSuppressionEnabled
+        : defaults.restoreLoadingSuppressionEnabled,
     removeRestoredTabsEnabled:
       typeof raw.removeRestoredTabsEnabled === 'boolean'
         ? raw.removeRestoredTabsEnabled

@@ -28,7 +28,7 @@ describe('storage', () => {
     expect(state).toEqual(getDefaultState());
   });
 
-  it('fills in restore removal defaults when missing', async () => {
+  it('fills in restore suppression defaults when missing', async () => {
     const storage = createMemoryStorage({
       tabManagerState: {
         version: 1,
@@ -39,6 +39,7 @@ describe('storage', () => {
 
     const state = await getState(storage);
 
+    expect(state.restoreLoadingSuppressionEnabled).toBe(true);
     expect(state.removeRestoredTabsEnabled).toBe(true);
   });
 
