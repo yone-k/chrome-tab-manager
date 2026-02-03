@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { createTabRowActions } from './tabRowActions';
 
 describe('createTabRowActions', () => {
-  it('opens when the row is clicked', () => {
+  it('行をクリックすると開く', () => {
     const onOpen = vi.fn();
     const onRemove = vi.fn();
     const actions = createTabRowActions({ onOpen, onRemove });
@@ -15,7 +15,7 @@ describe('createTabRowActions', () => {
     expect(onRemove).not.toHaveBeenCalled();
   });
 
-  it('stops propagation and removes when remove is clicked', () => {
+  it('削除クリック時に伝播を止めて削除する', () => {
     const onOpen = vi.fn();
     const onRemove = vi.fn();
     const actions = createTabRowActions({ onOpen, onRemove });
@@ -29,7 +29,7 @@ describe('createTabRowActions', () => {
     expect(onOpen).not.toHaveBeenCalled();
   });
 
-  it('opens on Enter or Space keydown', () => {
+  it('Enter または Space のキー入力で開く', () => {
     const onOpen = vi.fn();
     const onRemove = vi.fn();
     const actions = createTabRowActions({ onOpen, onRemove });

@@ -36,7 +36,7 @@ const historySets: HistorySet[] = [
 ];
 
 describe('filterHistorySets', () => {
-  it('filters by query across title and URL', () => {
+  it('タイトルとURLの両方でクエリを絞り込む', () => {
     const result = filterHistorySets(historySets, {
       query: 'docs',
       groupFilter: GROUP_FILTER_ALL,
@@ -47,7 +47,7 @@ describe('filterHistorySets', () => {
     expect(result[1].tabs.map((tab) => tab.title)).toEqual(['Docs']);
   });
 
-  it('filters by group title', () => {
+  it('グループ名で絞り込む', () => {
     const result = filterHistorySets(historySets, {
       query: '',
       groupFilter: 'Work',
@@ -57,7 +57,7 @@ describe('filterHistorySets', () => {
     expect(result[0].tabs.map((tab) => tab.title)).toEqual(['Docs', 'Mail']);
   });
 
-  it('filters by ungrouped tabs', () => {
+  it('未グループのタブで絞り込む', () => {
     const result = filterHistorySets(historySets, {
       query: '',
       groupFilter: GROUP_FILTER_UNGROUPED,
@@ -70,7 +70,7 @@ describe('filterHistorySets', () => {
 });
 
 describe('buildGroupFilterOptions', () => {
-  it('returns sorted group titles with default options', () => {
+  it('デフォルトのオプションを含む並び替え済みのグループ名を返す', () => {
     const options = buildGroupFilterOptions(historySets);
 
     expect(options).toEqual([GROUP_FILTER_ALL, GROUP_FILTER_UNGROUPED, 'Read', 'Work']);

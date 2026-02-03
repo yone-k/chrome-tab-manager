@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { filterSavableTabs, matchesExclusion, normalizeExclusions } from './exclusions';
 
 describe('normalizeExclusions', () => {
-  it('trims, removes empty entries, and deduplicates case-insensitively', () => {
+  it('前後の空白と空要素を除去し、大文字小文字を無視して重複を除く', () => {
     const result = normalizeExclusions([
       ' chrome:// ',
       '',
@@ -17,14 +17,14 @@ describe('normalizeExclusions', () => {
 });
 
 describe('matchesExclusion', () => {
-  it('matches by prefix when scheme-like entries are provided', () => {
+  it('スキーム形式の入力はプレフィックス一致で判定する', () => {
     const exclusions = normalizeExclusions(['chrome://', 'chrome-extension://']);
 
     expect(matchesExclusion('chrome://settings', exclusions)).toBe(true);
     expect(matchesExclusion('chrome-extension://abc/manager.html', exclusions)).toBe(true);
   });
 
-  it('matches by domain for host entries', () => {
+  it('ホスト形式の入力はドメイン一致で判定する', () => {
     const exclusions = normalizeExclusions(['example.com']);
 
     expect(matchesExclusion('https://example.com', exclusions)).toBe(true);
@@ -32,7 +32,7 @@ describe('matchesExclusion', () => {
     expect(matchesExclusion('https://example.org', exclusions)).toBe(false);
   });
 
-  it('is case-insensitive', () => {
+  it('大文字小文字を区別しない', () => {
     const exclusions = normalizeExclusions(['Example.com']);
 
     expect(matchesExclusion('HTTPS://EXAMPLE.COM/page', exclusions)).toBe(true);
@@ -40,7 +40,7 @@ describe('matchesExclusion', () => {
 });
 
 describe('filterSavableTabs', () => {
-  it('excludes pinned and excluded URLs', () => {
+  it('ピン留めと除外URLを除く', () => {
     const exclusions = normalizeExclusions(['chrome://', 'example.com']);
     const tabs = [
       { id: 1, url: 'https://example.com', pinned: false },

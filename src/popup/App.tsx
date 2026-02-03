@@ -100,29 +100,29 @@ export function App() {
     try {
       await openManagerTab();
     } catch (err) {
-      setStatus(err instanceof Error ? err.message : 'Failed to open tab manager.');
+      setStatus(err instanceof Error ? err.message : 'タブマネージャーを開けませんでした。');
     }
   };
 
   const handleSaveAndOpenManager = async () => {
     setIsWorking(true);
-    setStatus('Saving current tabs...');
+    setStatus('現在のタブを保存しています...');
     try {
       const stored = await getState();
       const tabs = await queryCurrentWindowTabs();
       if (tabs.length === 0) {
-        setStatus('No tabs found in the current window.');
+        setStatus('現在のウィンドウにタブがありません。');
         return;
       }
       const windowId = tabs[0]?.windowId;
       if (windowId === undefined) {
-        setStatus('No active window found.');
+        setStatus('アクティブなウィンドウが見つかりません。');
         return;
       }
       const exclusions = stored.exclusions;
       const savableTabs = filterSavableTabs(tabs, exclusions);
       if (savableTabs.length === 0) {
-        setStatus('No tabs to save. Everything is pinned or excluded.');
+        setStatus('保存できるタブがありません。すべてピン留めか除外対象です。');
         await openManagerTab();
         return;
       }
@@ -157,9 +157,9 @@ export function App() {
         await closeTabs(tabIds);
       }
       await openManagerTab();
-      setStatus(`Saved ${savableTabs.length} tabs.`);
+      setStatus(`${savableTabs.length} 件のタブを保存しました。`);
     } catch (err) {
-      setStatus(err instanceof Error ? err.message : 'Failed to save tabs.');
+      setStatus(err instanceof Error ? err.message : 'タブの保存に失敗しました。');
     } finally {
       setIsWorking(false);
     }
@@ -168,9 +168,7 @@ export function App() {
   return (
     <div className="popup">
       <header className="popup__header">
-        <span className="popup__badge">Chrome</span>
-        <h1 className="popup__title">{getPopupTitle()}</h1>
-        <p className="popup__subtitle">Manage your tabs quickly.</p>
+        <span className="popup__badge">{getPopupTitle()}</span>
       </header>
       <main className="popup__content">
         <button
@@ -179,7 +177,7 @@ export function App() {
           onClick={handleOpenManager}
           disabled={isWorking}
         >
-          Open tab manager
+          タブマネージャーを開く
         </button>
         <button
           className="secondary-button"
@@ -187,7 +185,7 @@ export function App() {
           onClick={handleSaveAndOpenManager}
           disabled={isWorking}
         >
-          {isWorking ? 'Working...' : 'Save & close tabs'}
+          {isWorking ? '処理中...' : 'タブを保存して閉じる'}
         </button>
         {status ? <p className="popup__hint">{status}</p> : null}
       </main>

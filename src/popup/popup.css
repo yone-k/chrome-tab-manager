@@ -10,7 +10,7 @@
 body {
   margin: 0;
   min-width: 320px;
-  min-height: 240px;
+  min-height: 180px;
   background: linear-gradient(160deg, #f8fafc 0%, #eef2ff 100%);
   color: #0f172a;
 }

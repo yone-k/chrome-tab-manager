@@ -26,7 +26,7 @@ export function OptionsApp() {
         setRemoveRestoredTabsEnabled(stored.removeRestoredTabsEnabled);
       } catch (err) {
         if (!cancelled) {
-          setError(err instanceof Error ? err.message : 'Failed to load settings.');
+          setError(err instanceof Error ? err.message : '設定の読み込みに失敗しました。');
         }
       }
     }
@@ -51,7 +51,7 @@ export function OptionsApp() {
       setStatus('saved');
     } catch (err) {
       setStatus('error');
-      setError(err instanceof Error ? err.message : 'Failed to save settings.');
+      setError(err instanceof Error ? err.message : '設定の保存に失敗しました。');
     }
   };
 
@@ -72,24 +72,24 @@ export function OptionsApp() {
       setStatus('saved');
     } catch (err) {
       setStatus('error');
-      setError(err instanceof Error ? err.message : 'Failed to reset settings.');
+      setError(err instanceof Error ? err.message : '設定のリセットに失敗しました。');
     }
   };
 
   return (
     <div className="options">
       <header className="options__header">
-        <span className="options__badge">Tab Manager</span>
-        <h1 className="options__title">Exclusion Rules</h1>
+        <span className="options__badge">タブマネージャー</span>
+        <h1 className="options__title">除外ルール</h1>
         <p className="options__subtitle">
-          Add one pattern per line. Prefixes like <code>chrome://</code> or domains like{' '}
-          <code>example.com</code> are supported.
+          1行に1パターンずつ追加してください。<code>chrome://</code> のようなプレフィックスや{' '}
+          <code>example.com</code> のようなドメインに対応しています。
         </p>
       </header>
 
       <section className="options__panel">
         <label className="options__label" htmlFor="exclusions">
-          Excluded URL prefixes / domains
+          除外するURLプレフィックス / ドメイン
         </label>
         <textarea
           id="exclusions"
@@ -121,15 +121,15 @@ export function OptionsApp() {
         </div>
         <div className="options__actions">
           <button className="primary-button" type="button" onClick={handleSave}>
-            Save
+            保存
           </button>
           <button className="ghost-button" type="button" onClick={handleReset}>
-            Reset defaults
+            初期設定に戻す
           </button>
           <span className="options__status" aria-live="polite">
-            {status === 'saving' && 'Saving...'}
-            {status === 'saved' && 'Saved.'}
-            {status === 'error' && 'Error.'}
+            {status === 'saving' && '保存中...'}
+            {status === 'saved' && '保存しました。'}
+            {status === 'error' && 'エラーが発生しました。'}
           </span>
         </div>
         {error ? <p className="options__error">{error}</p> : null}

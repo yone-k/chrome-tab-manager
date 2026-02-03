@@ -38,7 +38,7 @@ async function getCurrentWindowId() {
         return;
       }
       if (!window?.id) {
-        reject(new Error('No active window found.'));
+        reject(new Error('アクティブなウィンドウが見つかりません。'));
         return;
       }
       resolve(window.id);
@@ -272,7 +272,7 @@ export function ManagerApp() {
         if (!cancelled) {
           setState({
             status: 'error',
-            error: err instanceof Error ? err.message : 'Failed to load history.',
+            error: err instanceof Error ? err.message : '履歴の読み込みに失敗しました。',
           });
         }
       }
@@ -354,7 +354,7 @@ export function ManagerApp() {
   };
 
   const handleRestoreSet = async (set: HistorySet) => {
-    setActionMessage('Restoring tabs...');
+    setActionMessage('タブを復元しています...');
     try {
       const targetSet = fullSets.find((item) => item.id === set.id) ?? set;
       const windowId = await getCurrentWindowId();
@@ -379,14 +379,16 @@ export function ManagerApp() {
         await refreshState(updated.historySets);
       }
       if (failedTabs.length > 0) {
-        setActionMessage(`Restored ${restoredTabs.length} of ${targetSet.tabs.length} tabs.`);
+        setActionMessage(
+          `${targetSet.tabs.length} 件中 ${restoredTabs.length} 件のタブを復元しました。`,
+        );
       } else {
-        setActionMessage('Tabs restored.');
+        setActionMessage('タブを復元しました。');
       }
     } catch (err) {
       console.error('Failed to restore tabs', err);
       setActionMessage(
-        err instanceof Error ? err.message : 'Failed to restore tabs. Please try again.',
+        err instanceof Error ? err.message : 'タブの復元に失敗しました。もう一度お試しください。',
       );
     }
   };
@@ -397,7 +399,7 @@ export function ManagerApp() {
     if (!group) {
       return;
     }
-    setActionMessage('Restoring group...');
+    setActionMessage('グループを復元しています...');
     try {
       const windowId = await getCurrentWindowId();
       const tabs = targetSet.tabs.filter((tab) => tab.groupId === groupId);
@@ -422,18 +424,18 @@ export function ManagerApp() {
         await refreshState(updated.historySets);
       }
       if (failedTabs.length > 0) {
-        setActionMessage(`Restored ${restoredTabs.length} of ${tabs.length} tabs.`);
+        setActionMessage(`${tabs.length} 件中 ${restoredTabs.length} 件のタブを復元しました。`);
       } else {
-        setActionMessage('Group restored.');
+        setActionMessage('グループを復元しました。');
       }
     } catch (err) {
       console.error('Failed to restore group', err);
-      setActionMessage(err instanceof Error ? err.message : 'Failed to restore group.');
+      setActionMessage(err instanceof Error ? err.message : 'グループの復元に失敗しました。');
     }
   };
 
   const handleRestoreTab = async (tab: TabSnapshot) => {
-    setActionMessage('Restoring tab...');
+    setActionMessage('タブを復元しています...');
     try {
       const windowId = await getCurrentWindowId();
       const { restoredTabs } = await restoreTabs(
@@ -452,20 +454,20 @@ export function ManagerApp() {
         await refreshState(updated.historySets);
       }
       if (restoredTabs.length === 1) {
-        setActionMessage('Tab restored.');
+        setActionMessage('タブを復元しました。');
       } else {
-        setActionMessage('Failed to restore tab.');
+        setActionMessage('タブの復元に失敗しました。');
       }
     } catch (err) {
       console.error('Failed to restore tab', err);
-      setActionMessage(err instanceof Error ? err.message : 'Failed to restore tab.');
+      setActionMessage(err instanceof Error ? err.message : 'タブの復元に失敗しました。');
     }
   };
 
   if (state.status === 'loading') {
     return (
       <div className="manager manager--center">
-        <p>Loading tab history...</p>
+        <p>タブ履歴を読み込んでいます...</p>
       </div>
     );
   }
@@ -482,19 +484,19 @@ export function ManagerApp() {
     <div className="manager">
       <header className="manager__header">
         <div className="manager__header-top">
-          <span className="manager__badge">Tab Manager</span>
+          <span className="manager__badge">タブマネージャー</span>
           <a
             className="ghost-button manager__options-link"
             href={optionsUrl}
             target="_blank"
             rel="noreferrer"
           >
-            Options
+            設定
           </a>
         </div>
-        <h1 className="manager__title">Saved tab sessions</h1>
+        <h1 className="manager__title">保存済みのタブセッション</h1>
         <p className="manager__subtitle">
-          Restore, search, and filter across your saved tab sessions.
+          保存済みのタブセッションを復元・検索・フィルタできます。
         </p>
       </header>
 
@@ -502,7 +504,7 @@ export function ManagerApp() {
         <input
           className="manager__search"
           type="search"
-          placeholder="Search titles or URLs"
+          placeholder="タイトルまたはURLで検索"
           value={query}
           onChange={(event) => setQuery(event.target.value)}
         />
@@ -514,9 +516,9 @@ export function ManagerApp() {
           {groupOptions.map((option) => (
             <option key={option} value={option}>
               {option === GROUP_FILTER_ALL
-                ? 'All groups'
+                ? 'すべてのグループ'
                 : option === GROUP_FILTER_UNGROUPED
-                  ? 'Ungrouped'
+                  ? '未グループ'
                   : option}
             </option>
           ))}
@@ -526,7 +528,7 @@ export function ManagerApp() {
 
       <main className="manager__content">
         {filteredSets.length === 0 ? (
-          <p className="manager__empty">No tabs match the current filters.</p>
+          <p className="manager__empty">現在のフィルタに一致するタブがありません。</p>
         ) : (
           filteredSets.map((set) => {
             const groupedTabs = groupTabsById(set.tabs);
@@ -535,8 +537,8 @@ export function ManagerApp() {
             const visibleTabs = set.tabs.length;
             const tabSummary =
               totalTabs === visibleTabs
-                ? `${visibleTabs} tabs saved`
-                : `${visibleTabs} / ${totalTabs} shown`;
+                ? `保存済みタブ: ${visibleTabs}件`
+                : `表示中: ${visibleTabs} / ${totalTabs}件`;
             const rowActions = createTabRowActions<TabSnapshot>({
               onOpen: handleRestoreTab,
               onRemove: (tab) => handleDeleteTab(set.id, tab),
@@ -554,14 +556,14 @@ export function ManagerApp() {
                       type="button"
                       onClick={() => handleRestoreSet(set)}
                     >
-                      Restore all
+                      すべて復元
                     </button>
                     <button
                       className="ghost-button"
                       type="button"
                       onClick={() => handleDeleteSet(set.id)}
                     >
-                      Delete set
+                      セットを削除
                     </button>
                   </div>
                 </div>
@@ -580,7 +582,7 @@ export function ManagerApp() {
                           type="button"
                           onClick={() => handleRestoreGroup(set, group.id)}
                         >
-                          Restore group
+                          グループを復元
                         </button>
                       </div>
                       <ul className="manager__tab-list">
@@ -590,7 +592,7 @@ export function ManagerApp() {
                             className="manager__tab manager__tab--clickable"
                             role="button"
                             tabIndex={0}
-                            aria-label={`Open ${tab.title}`}
+                            aria-label={`${tab.title}を開く`}
                             onClick={rowActions.handleRowClick(tab)}
                             onKeyDown={rowActions.handleRowKeyDown(tab)}
                           >
@@ -604,7 +606,7 @@ export function ManagerApp() {
                                 type="button"
                                 onClick={rowActions.handleRemoveClick(tab)}
                               >
-                                Remove
+                                削除
                               </button>
                             </div>
                           </li>
@@ -617,7 +619,7 @@ export function ManagerApp() {
                 {groupedTabs.has(null) ? (
                   <section className="manager__group">
                     <div className="manager__group-header">
-                      <h3 className="manager__group-title">Ungrouped</h3>
+                      <h3 className="manager__group-title">未グループ</h3>
                     </div>
                     <ul className="manager__tab-list">
                       {(groupedTabs.get(null) ?? []).map((tab) => (
@@ -626,7 +628,7 @@ export function ManagerApp() {
                           className="manager__tab manager__tab--clickable"
                           role="button"
                           tabIndex={0}
-                          aria-label={`Open ${tab.title}`}
+                          aria-label={`${tab.title}を開く`}
                           onClick={rowActions.handleRowClick(tab)}
                           onKeyDown={rowActions.handleRowKeyDown(tab)}
                         >
@@ -640,7 +642,7 @@ export function ManagerApp() {
                               type="button"
                               onClick={rowActions.handleRemoveClick(tab)}
                             >
-                              Remove
+                              削除
                             </button>
                           </div>
                         </li>

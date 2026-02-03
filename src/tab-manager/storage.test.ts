@@ -21,14 +21,14 @@ function createMemoryStorage(initial: Record<string, unknown> = {}) {
 }
 
 describe('storage', () => {
-  it('returns default state when nothing is stored', async () => {
+  it('保存がない場合はデフォルト状態を返す', async () => {
     const storage = createMemoryStorage();
     const state = await getState(storage);
 
     expect(state).toEqual(getDefaultState());
   });
 
-  it('fills in restore suppression defaults when missing', async () => {
+  it('復元抑制のデフォルト値を補完する', async () => {
     const storage = createMemoryStorage({
       tabManagerState: {
         version: 1,
@@ -43,7 +43,7 @@ describe('storage', () => {
     expect(state.removeRestoredTabsEnabled).toBe(true);
   });
 
-  it('persists state through setState', async () => {
+  it('setState で状態を永続化する', async () => {
     const storage = createMemoryStorage();
     const nextState = {
       ...getDefaultState(),
@@ -64,7 +64,7 @@ describe('storage', () => {
     expect(state).toEqual(nextState);
   });
 
-  it('supports functional updates with normalization', async () => {
+  it('正規化を伴う関数更新に対応する', async () => {
     const storage = createMemoryStorage({
       tabManagerState: {
         version: 1,

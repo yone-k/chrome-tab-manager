@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { DEFAULT_RESTORE_LOADING_THRESHOLD, shouldSuppressRestoreLoading } from './restorePolicy';
 
 describe('restorePolicy', () => {
-  it('suppresses loading when enabled and tab count meets threshold', () => {
+  it('有効で閾値以上のタブ数なら読み込みを抑制する', () => {
     const result = shouldSuppressRestoreLoading({
       enabled: true,
       tabCount: DEFAULT_RESTORE_LOADING_THRESHOLD,
@@ -12,13 +12,13 @@ describe('restorePolicy', () => {
     expect(result).toBe(true);
   });
 
-  it('does not suppress loading when disabled', () => {
+  it('無効なら読み込みを抑制しない', () => {
     const result = shouldSuppressRestoreLoading({ enabled: false, tabCount: 5 });
 
     expect(result).toBe(false);
   });
 
-  it('does not suppress loading when below threshold', () => {
+  it('閾値未満なら読み込みを抑制しない', () => {
     const result = shouldSuppressRestoreLoading({ enabled: true, tabCount: 1 });
 
     expect(result).toBe(false);

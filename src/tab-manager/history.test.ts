@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { buildHistorySet, createHistoryId } from './history';
 
 describe('buildHistorySet', () => {
-  it('keeps tab order and filters groups to those referenced', () => {
+  it('タブ順序を保ち、参照されているグループのみを残す', () => {
     const result = buildHistorySet({
       id: 'set-1',
       createdAt: 1700000000000,
@@ -32,7 +32,7 @@ describe('buildHistorySet', () => {
 });
 
 describe('createHistoryId', () => {
-  it('returns unique identifiers', () => {
+  it('一意な識別子を返す', () => {
     const first = createHistoryId();
     const second = createHistoryId();
 
