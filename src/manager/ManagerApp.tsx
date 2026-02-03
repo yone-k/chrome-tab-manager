@@ -130,9 +130,12 @@ async function restoreTabs(tabs: TabSnapshot[], groups: GroupSnapshot[], windowI
 
 export function ManagerApp() {
   const optionsUrl = chrome.runtime.getURL('options.html');
-  const [state, setState] = useState<{ status: LoadState; data?: HistorySet[]; error?: string }>({
-    status: 'loading',
-  });
+  const [state, setState] = useState<{
+    status: LoadState;
+    data?: HistorySet[];
+    error?: string;
+    removeRestoredTabsEnabled?: boolean;
+  }>({ status: 'loading' });
   const [query, setQuery] = useState('');
   const [groupFilter, setGroupFilter] = useState(GROUP_FILTER_ALL);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
@@ -145,7 +148,11 @@ export function ManagerApp() {
         if (cancelled) {
           return;
         }
-        setState({ status: 'ready', data: stored.historySets });
+        setState({
+          status: 'ready',
+          data: stored.historySets,
+          removeRestoredTabsEnabled: stored.removeRestoredTabsEnabled,
+        });
       } catch (err) {
         if (!cancelled) {
           setState({
@@ -189,8 +196,14 @@ export function ManagerApp() {
   }, [state]);
 
   const refreshState = async (nextSets: HistorySet[]) => {
-    setState({ status: 'ready', data: nextSets });
+    setState((current) => ({
+      status: 'ready',
+      data: nextSets,
+      removeRestoredTabsEnabled: current.removeRestoredTabsEnabled ?? true,
+    }));
   };
+
+  const removeRestoredTabsEnabled = state.removeRestoredTabsEnabled ?? true;
 
   const handleDeleteSet = async (setId: string) => {
     const updated = await updateState((current) => ({
@@ -229,18 +242,20 @@ export function ManagerApp() {
       const targetSet = fullSets.find((item) => item.id === set.id) ?? set;
       const windowId = await getCurrentWindowId();
       await restoreTabs(targetSet.tabs, targetSet.groups, windowId);
-      const updated = await updateState((current) => ({
-        ...current,
-        historySets: current.historySets
-          .map((item) => {
-            if (item.id !== targetSet.id) {
-              return item;
-            }
-            return cleanupHistorySet(item, targetSet.tabs);
-          })
-          .filter((item): item is HistorySet => item !== null),
-      }));
-      await refreshState(updated.historySets);
+      if (removeRestoredTabsEnabled) {
+        const updated = await updateState((current) => ({
+          ...current,
+          historySets: current.historySets
+            .map((item) => {
+              if (item.id !== targetSet.id) {
+                return item;
+              }
+              return cleanupHistorySet(item, targetSet.tabs);
+            })
+            .filter((item): item is HistorySet => item !== null),
+        }));
+        await refreshState(updated.historySets);
+      }
       setActionMessage('Tabs restored.');
     } catch (err) {
       setActionMessage(
@@ -260,18 +275,20 @@ export function ManagerApp() {
       const windowId = await getCurrentWindowId();
       const tabs = targetSet.tabs.filter((tab) => tab.groupId === groupId);
       await restoreTabs(tabs, [group], windowId);
-      const updated = await updateState((current) => ({
-        ...current,
-        historySets: current.historySets
-          .map((item) => {
-            if (item.id !== targetSet.id) {
-              return item;
-            }
-            return cleanupHistorySet(item, tabs);
-          })
-          .filter((item): item is HistorySet => item !== null),
-      }));
-      await refreshState(updated.historySets);
+      if (removeRestoredTabsEnabled) {
+        const updated = await updateState((current) => ({
+          ...current,
+          historySets: current.historySets
+            .map((item) => {
+              if (item.id !== targetSet.id) {
+                return item;
+              }
+              return cleanupHistorySet(item, tabs);
+            })
+            .filter((item): item is HistorySet => item !== null),
+        }));
+        await refreshState(updated.historySets);
+      }
       setActionMessage('Group restored.');
     } catch (err) {
       setActionMessage(err instanceof Error ? err.message : 'Failed to restore group.');
@@ -283,13 +300,15 @@ export function ManagerApp() {
     try {
       const windowId = await getCurrentWindowId();
       await restoreTabs([tab], [], windowId);
-      const updated = await updateState((current) => ({
-        ...current,
-        historySets: current.historySets
-          .map((item) => cleanupHistorySet(item, [tab]))
-          .filter((item): item is HistorySet => item !== null),
-      }));
-      await refreshState(updated.historySets);
+      if (removeRestoredTabsEnabled) {
+        const updated = await updateState((current) => ({
+          ...current,
+          historySets: current.historySets
+            .map((item) => cleanupHistorySet(item, [tab]))
+            .filter((item): item is HistorySet => item !== null),
+        }));
+        await refreshState(updated.historySets);
+      }
       setActionMessage('Tab restored.');
     } catch (err) {
       setActionMessage(err instanceof Error ? err.message : 'Failed to restore tab.');

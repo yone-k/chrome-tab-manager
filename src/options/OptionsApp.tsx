@@ -8,6 +8,7 @@ type StatusState = 'idle' | 'saving' | 'saved' | 'error';
 
 export function OptionsApp() {
   const [exclusionsText, setExclusionsText] = useState('');
+  const [removeRestoredTabsEnabled, setRemoveRestoredTabsEnabled] = useState(true);
   const [status, setStatus] = useState<StatusState>('idle');
   const [error, setError] = useState<string | null>(null);
 
@@ -20,6 +21,7 @@ export function OptionsApp() {
           return;
         }
         setExclusionsText(stored.exclusions.join('\n'));
+        setRemoveRestoredTabsEnabled(stored.removeRestoredTabsEnabled);
       } catch (err) {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : 'Failed to load settings.');
@@ -40,6 +42,7 @@ export function OptionsApp() {
       await updateState((state) => ({
         ...state,
         exclusions: normalized,
+        removeRestoredTabsEnabled,
       }));
       setExclusionsText(normalized.join('\n'));
       setStatus('saved');
@@ -57,8 +60,10 @@ export function OptionsApp() {
       await updateState((state) => ({
         ...state,
         exclusions: normalized,
+        removeRestoredTabsEnabled: true,
       }));
       setExclusionsText(normalized.join('\n'));
+      setRemoveRestoredTabsEnabled(true);
       setStatus('saved');
     } catch (err) {
       setStatus('error');
@@ -89,6 +94,15 @@ export function OptionsApp() {
           rows={10}
           spellCheck={false}
         />
+        <label className="options__toggle">
+          <input
+            className="options__toggle-input"
+            type="checkbox"
+            checked={removeRestoredTabsEnabled}
+            onChange={(event) => setRemoveRestoredTabsEnabled(event.target.checked)}
+          />
+          <span className="options__toggle-label">復元したタブを履歴から削除する</span>
+        </label>
         <div className="options__actions">
           <button className="primary-button" type="button" onClick={handleSave}>
             Save

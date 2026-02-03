@@ -76,6 +76,20 @@ body {
   resize: vertical;
 }
 
+.options__toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  color: #0f172a;
+}
+
+.options__toggle-input {
+  width: 16px;
+  height: 16px;
+  accent-color: #1e40af;
+}
+
 .options__actions {
   display: flex;
   align-items: center;

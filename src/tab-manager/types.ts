@@ -24,4 +24,5 @@ export type TabManagerState = {
   version: 1;
   historySets: HistorySet[];
   exclusions: string[];
+  removeRestoredTabsEnabled: boolean;
 };
