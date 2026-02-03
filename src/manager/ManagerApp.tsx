@@ -8,6 +8,7 @@ import {
 } from '../tab-manager/filters';
 import { getState, updateState } from '../tab-manager/storage';
 import type { GroupSnapshot, HistorySet, TabSnapshot } from '../tab-manager/types';
+import { cleanupHistorySet } from './restoreCleanup';
 import { createTabRowActions } from './tabRowActions';
 import './manager.css';
 
@@ -217,6 +218,18 @@ export function ManagerApp() {
       const targetSet = fullSets.find((item) => item.id === set.id) ?? set;
       const windowId = await getCurrentWindowId();
       await restoreTabs(targetSet.tabs, targetSet.groups, windowId);
+      const updated = await updateState((current) => ({
+        ...current,
+        historySets: current.historySets
+          .map((item) => {
+            if (item.id !== targetSet.id) {
+              return item;
+            }
+            return cleanupHistorySet(item, targetSet.tabs);
+          })
+          .filter((item): item is HistorySet => item !== null),
+      }));
+      await refreshState(updated.historySets);
       setActionMessage('Tabs restored.');
     } catch (err) {
       setActionMessage(
@@ -236,6 +249,18 @@ export function ManagerApp() {
       const windowId = await getCurrentWindowId();
       const tabs = targetSet.tabs.filter((tab) => tab.groupId === groupId);
       await restoreTabs(tabs, [group], windowId);
+      const updated = await updateState((current) => ({
+        ...current,
+        historySets: current.historySets
+          .map((item) => {
+            if (item.id !== targetSet.id) {
+              return item;
+            }
+            return cleanupHistorySet(item, tabs);
+          })
+          .filter((item): item is HistorySet => item !== null),
+      }));
+      await refreshState(updated.historySets);
       setActionMessage('Group restored.');
     } catch (err) {
       setActionMessage(err instanceof Error ? err.message : 'Failed to restore group.');
@@ -247,6 +272,13 @@ export function ManagerApp() {
     try {
       const windowId = await getCurrentWindowId();
       await restoreTabs([tab], [], windowId);
+      const updated = await updateState((current) => ({
+        ...current,
+        historySets: current.historySets
+          .map((item) => cleanupHistorySet(item, [tab]))
+          .filter((item): item is HistorySet => item !== null),
+      }));
+      await refreshState(updated.historySets);
       setActionMessage('Tab restored.');
     } catch (err) {
       setActionMessage(err instanceof Error ? err.message : 'Failed to restore tab.');
