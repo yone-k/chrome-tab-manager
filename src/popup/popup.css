@@ -71,6 +71,11 @@ body {
   background: #1e293b;
 }
 
+.primary-button:disabled {
+  background: #94a3b8;
+  cursor: not-allowed;
+}
+
 .popup__hint {
   margin: 0;
   color: #64748b;

@@ -16,6 +16,7 @@ export default tseslint.config(
       sourceType: 'module',
       globals: {
         ...globals.browser,
+        chrome: 'readonly',
       },
     },
     plugins: {
