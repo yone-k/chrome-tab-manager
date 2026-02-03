@@ -1,3 +1,3 @@
 export function getPopupTitle() {
-  return 'Tab Manager';
+  return 'タブマネージャー';
 }

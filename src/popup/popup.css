@@ -10,7 +10,7 @@
 body {
   margin: 0;
   min-width: 320px;
-  min-height: 240px;
+  min-height: 180px;
   background: linear-gradient(160deg, #f8fafc 0%, #eef2ff 100%);
   color: #0f172a;
 }
@@ -69,6 +69,32 @@ body {
 
 .primary-button:hover {
   background: #1e293b;
+}
+
+.primary-button:disabled {
+  background: #94a3b8;
+  cursor: not-allowed;
+}
+
+.secondary-button {
+  border: 1px solid #cbd5f5;
+  border-radius: 10px;
+  padding: 10px 14px;
+  background: #fff;
+  color: #0f172a;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.secondary-button:hover {
+  background: #f1f5f9;
+}
+
+.secondary-button:disabled {
+  border-color: #e2e8f0;
+  background: #f8fafc;
+  color: #94a3b8;
+  cursor: not-allowed;
 }
 
 .popup__hint {
