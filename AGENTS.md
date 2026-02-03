@@ -24,7 +24,7 @@
 - `pnpm format`: Prettier でフォーマット
 - `pnpm typecheck`: TypeScript の型チェックのみ
 - `pnpm check`: lint + format + typecheck
-- 変更時は必ず `pnpm check` を通すこと
+- 一連のタスク完了時は必ず `pnpm check` を実行し、結果を報告すること
 
 ## コーディングスタイル / 命名規則
 
