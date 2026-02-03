@@ -8,6 +8,7 @@ import {
 } from '../tab-manager/filters';
 import { getState, updateState } from '../tab-manager/storage';
 import type { GroupSnapshot, HistorySet, TabSnapshot } from '../tab-manager/types';
+import { createTabRowActions } from './tabRowActions';
 import './manager.css';
 
 type LoadState = 'loading' | 'ready' | 'error';
@@ -127,6 +128,7 @@ async function restoreTabs(tabs: TabSnapshot[], groups: GroupSnapshot[], windowI
 }
 
 export function ManagerApp() {
+  const optionsUrl = chrome.runtime.getURL('options.html');
   const [state, setState] = useState<{ status: LoadState; data?: HistorySet[]; error?: string }>({
     status: 'loading',
   });
@@ -270,7 +272,17 @@ export function ManagerApp() {
   return (
     <div className="manager">
       <header className="manager__header">
-        <span className="manager__badge">Tab Manager</span>
+        <div className="manager__header-top">
+          <span className="manager__badge">Tab Manager</span>
+          <a
+            className="ghost-button manager__options-link"
+            href={optionsUrl}
+            target="_blank"
+            rel="noreferrer"
+          >
+            Options
+          </a>
+        </div>
         <h1 className="manager__title">Saved tab sessions</h1>
         <p className="manager__subtitle">
           Restore, search, and filter across your saved tab sessions.
@@ -316,6 +328,10 @@ export function ManagerApp() {
               totalTabs === visibleTabs
                 ? `${visibleTabs} tabs saved`
                 : `${visibleTabs} / ${totalTabs} shown`;
+            const rowActions = createTabRowActions<TabSnapshot>({
+              onOpen: handleRestoreTab,
+              onRemove: (tab) => handleDeleteTab(set.id, tab),
+            });
             return (
               <article key={set.id} className="manager__card">
                 <div className="manager__card-header">
@@ -360,8 +376,16 @@ export function ManagerApp() {
                       </div>
                       <ul className="manager__tab-list">
                         {tabs.map((tab) => (
-                          <li key={`${tab.url}-${tab.index}`} className="manager__tab">
-                            <div>
+                          <li
+                            key={`${tab.url}-${tab.index}`}
+                            className="manager__tab manager__tab--clickable"
+                            role="button"
+                            tabIndex={0}
+                            aria-label={`Open ${tab.title}`}
+                            onClick={rowActions.handleRowClick(tab)}
+                            onKeyDown={rowActions.handleRowKeyDown(tab)}
+                          >
+                            <div className="manager__tab-main">
                               <p className="manager__tab-title">{tab.title}</p>
                               <p className="manager__tab-url">{tab.url}</p>
                             </div>
@@ -369,14 +393,7 @@ export function ManagerApp() {
                               <button
                                 className="ghost-button"
                                 type="button"
-                                onClick={() => handleRestoreTab(tab)}
-                              >
-                                Open
-                              </button>
-                              <button
-                                className="ghost-button"
-                                type="button"
-                                onClick={() => handleDeleteTab(set.id, tab)}
+                                onClick={rowActions.handleRemoveClick(tab)}
                               >
                                 Remove
                               </button>
@@ -395,8 +412,16 @@ export function ManagerApp() {
                     </div>
                     <ul className="manager__tab-list">
                       {(groupedTabs.get(null) ?? []).map((tab) => (
-                        <li key={`${tab.url}-${tab.index}`} className="manager__tab">
-                          <div>
+                        <li
+                          key={`${tab.url}-${tab.index}`}
+                          className="manager__tab manager__tab--clickable"
+                          role="button"
+                          tabIndex={0}
+                          aria-label={`Open ${tab.title}`}
+                          onClick={rowActions.handleRowClick(tab)}
+                          onKeyDown={rowActions.handleRowKeyDown(tab)}
+                        >
+                          <div className="manager__tab-main">
                             <p className="manager__tab-title">{tab.title}</p>
                             <p className="manager__tab-url">{tab.url}</p>
                           </div>
@@ -404,14 +429,7 @@ export function ManagerApp() {
                             <button
                               className="ghost-button"
                               type="button"
-                              onClick={() => handleRestoreTab(tab)}
-                            >
-                              Open
-                            </button>
-                            <button
-                              className="ghost-button"
-                              type="button"
-                              onClick={() => handleDeleteTab(set.id, tab)}
+                              onClick={rowActions.handleRemoveClick(tab)}
                             >
                               Remove
                             </button>

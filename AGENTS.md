@@ -1,53 +1,54 @@
-# Repository Guidelines
+# リポジトリガイドライン
 
-## Project Structure & Module Organization
+## プロジェクト構成 / モジュール構成
 
-- Root config: `manifest.json`, `popup.html`, `vite.config.ts`, `tsconfig.json`, `eslint.config.js`.
-- Source code lives in `src/popup/` (React popup UI).
-  - Entry: `src/popup/main.tsx`
-  - App shell: `src/popup/App.tsx`
-  - Styles: `src/popup/popup.css`
-  - Utilities: `src/popup/title.ts`
-- Tests: `src/popup/__tests__/` (Vitest).
-- Static assets: `public/icons/` (extension icons).
-- Build output: `dist/`.
+- ルート設定: `manifest.json`, `popup.html`, `vite.config.ts`, `tsconfig.json`, `eslint.config.js`
+- ソースコードは `src/popup/`（React のポップアップ UI）
+  - エントリ: `src/popup/main.tsx`
+  - アプリシェル: `src/popup/App.tsx`
+  - スタイル: `src/popup/popup.css`
+  - ユーティリティ: `src/popup/title.ts`
+- テスト: `src/popup/__tests__/`（Vitest）
+- 静的アセット: `public/icons/`（拡張アイコン）
+- ビルド出力: `dist/`
 
-## Build, Test, and Development Commands
+## ビルド / テスト / 開発コマンド
 
-Use `pnpm` for all commands.
+コマンドはすべて `pnpm` を使用すること。
 
-- `pnpm dev`: start Vite dev server for popup UI.
-- `pnpm build`: typecheck then production build (`tsc && vite build`).
-- `pnpm preview`: preview the production build locally.
-- `pnpm test`: run unit tests with Vitest.
-- `pnpm lint`: run ESLint across the repo.
-- `pnpm format`: run Prettier to format files.
-- `pnpm typecheck`: run TypeScript type checks only.
-- `pnpm check`: lint + format + typecheck.
+- `pnpm dev`: ポップアップ UI の Vite dev サーバを起動
+- `pnpm build`: 型チェック後に本番ビルド（`tsc && vite build`）
+- `pnpm preview`: 本番ビルドのプレビュー
+- `pnpm test`: Vitest でユニットテスト実行
+- `pnpm lint`: ESLint 実行
+- `pnpm format`: Prettier でフォーマット
+- `pnpm typecheck`: TypeScript の型チェックのみ
+- `pnpm check`: lint + format + typecheck
+- 変更時は必ず `pnpm check` を通すこと
 
-## Coding Style & Naming Conventions
+## コーディングスタイル / 命名規則
 
-- Prettier is the source of truth: single quotes, semicolons, trailing commas, 100-char lines.
-- Indentation follows Prettier defaults (2 spaces).
-- React components use PascalCase (e.g., `App.tsx`); functions/variables use camelCase.
-- Keep popup UI logic in `src/popup/` and avoid cross-folder coupling.
+- Prettier が唯一の正とする: シングルクォート、セミコロン、末尾カンマ、100文字幅
+- インデントは Prettier のデフォルト（2スペース）
+- React コンポーネントは PascalCase（例: `App.tsx`）、関数/変数は camelCase
+- ポップアップ UI のロジックは `src/popup/` に集約し、フォルダ横断の結合を避ける
 
-## Development Approach (TDD)
+## 開発アプローチ（TDD）
 
-- Follow RED → GREEN → REFACTOR strictly: write a failing test first, implement the minimum to pass, then refactor.
-- Keep units small and single-responsibility; favor explicit dependencies for testability.
-- Prefer co-locating new feature modules with their tests when adding new folders; existing tests live in `src/popup/__tests__/`.
-- Finish with quality checks (`pnpm lint`, `pnpm format`, `pnpm typecheck`, `pnpm test`) before PRs.
+- RED → GREEN → REFACTOR を厳守（失敗テスト → 最小実装 → リファクタ）
+- 単一責務・小さな単位を維持し、テスト容易性のため依存を明示する
+- 新規フォルダ追加時はテストをコロケーションする（既存テストは `src/popup/__tests__/`）
+- PR 前に品質チェック（`pnpm lint`, `pnpm format`, `pnpm typecheck`, `pnpm test`）を行う
 
-## Testing Guidelines
+## テストガイドライン
 
-- Test framework: Vitest.
-- Location: `src/popup/__tests__/`.
-- Naming: `*.test.ts` (e.g., `title.test.ts`).
-- Run `pnpm test` before opening a PR when touching logic.
+- テストフレームワーク: Vitest
+- 置き場所: `src/popup/__tests__/`
+- 命名: `*.test.ts`（例: `title.test.ts`）
+- ロジック変更時は `pnpm test` を実行する
 
-## Commit & Pull Request Guidelines
+## コミット / PR ガイドライン
 
-- Use Conventional Commits (e.g., `feat: add grouping UI`, `fix: handle empty title`).
-- PRs must include a short summary and link related issues.
-- Screenshots are recommended for UI changes but not required.
+- Conventional Commits を使用（例: `feat: add grouping UI`, `fix: handle empty title`）
+- PR には短い要約と関連 Issue リンクを含める
+- UI 変更の場合はスクリーンショット推奨（必須ではない）
