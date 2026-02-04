@@ -30,6 +30,8 @@ jobs:
         run: pnpm test
       - name: Build
         run: pnpm build
+      - name: Remove Vite manifest
+        run: rm -f dist/.vite/manifest.json
       - name: Upload Release Assets
         uses: softprops/action-gh-release@v2
         with:
