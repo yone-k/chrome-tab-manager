@@ -30,9 +30,9 @@ jobs:
         run: pnpm test
       - name: Build
         run: pnpm build
-      - name: Remove Vite manifest
-        run: rm -f dist/.vite/manifest.json
+      - name: Create release zip
+        run: zip -r "chrome-tab-manager-v${{ github.ref_name }}.zip" dist
       - name: Upload Release Assets
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/**
+          files: chrome-tab-manager-v${{ github.ref_name }}.zip
