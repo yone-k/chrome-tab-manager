@@ -30,9 +30,16 @@ jobs:
         run: pnpm test
       - name: Build
         run: pnpm build
+      - name: Prepare release directory
+        run: |
+          rm -rf release
+          mkdir -p release/chrome-tab-manager
+          cp -R dist/* release/chrome-tab-manager/
       - name: Create release zip
-        run: zip -r "chrome-tab-manager-v${{ github.ref_name }}.zip" dist
+        run: |
+          cd release
+          zip -r "chrome-tab-manager-v${{ github.ref_name }}.zip" chrome-tab-manager
       - name: Upload Release Assets
         uses: softprops/action-gh-release@v2
         with:
-          files: chrome-tab-manager-v${{ github.ref_name }}.zip
+          files: release/chrome-tab-manager-v${{ github.ref_name }}.zip
