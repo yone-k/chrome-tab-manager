@@ -43,7 +43,6 @@ export default tseslint.config(
   },
   {
     files: ['**/*.{js,jsx}'],
-    ignores: ['eslint.config.js'],
     rules: {
       'no-restricted-syntax': [
         'error',
