@@ -1,4 +1,5 @@
 export type GroupSnapshot = {
+  uid: string;
   id: number;
   title: string;
   color: chrome.tabGroups.ColorEnum;
@@ -6,6 +7,7 @@ export type GroupSnapshot = {
 };
 
 export type TabSnapshot = {
+  uid: string;
   title: string;
   url: string;
   index: number;

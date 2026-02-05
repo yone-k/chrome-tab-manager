@@ -12,6 +12,7 @@ body {
   min-height: 100vh;
   background: linear-gradient(180deg, #eff6ff 0%, #f8fafc 55%, #e2e8f0 100%);
   color: #0f172a;
+  scrollbar-gutter: stable;
 }
 
 #root {
@@ -98,7 +99,7 @@ body {
 
 .manager__content {
   display: grid;
-  gap: 16px;
+  gap: 0;
 }
 
 .manager__card {
@@ -116,6 +117,12 @@ body {
   gap: 12px;
   align-items: center;
   justify-content: space-between;
+}
+
+.manager__card-header-main {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
 .manager__card-title {
@@ -147,6 +154,12 @@ body {
   gap: 12px;
 }
 
+.manager__group-header-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
 .manager__group-title {
   margin: 0;
   font-size: 16px;
@@ -157,18 +170,19 @@ body {
   margin: 0;
   padding: 0;
   display: grid;
-  gap: 10px;
+  gap: 0;
 }
 
 .manager__tab {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   gap: 10px;
   padding: 10px 12px;
   border-radius: 12px;
   background: #f8fafc;
   border: 1px solid #e2e8f0;
+  position: relative;
 }
 
 .manager__tab--clickable {
@@ -203,6 +217,101 @@ body {
   display: flex;
   gap: 8px;
   justify-self: end;
+}
+
+.manager__card--dragging,
+.manager__group--dragging,
+.manager__tab--dragging {
+  opacity: 0;
+  height: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.manager__card,
+.manager__group {
+  position: relative;
+}
+
+.manager__group-list {
+  display: grid;
+  gap: 0;
+}
+
+.manager__drop-zone {
+  position: relative;
+  height: 1px;
+}
+
+.drag-handle {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: 1px solid #cbd5f5;
+  background: #e2e8f0;
+  display: inline-grid;
+  place-items: center;
+  cursor: grab;
+  flex-shrink: 0;
+  justify-self: start;
+  align-self: center;
+}
+
+.drag-handle::before {
+  content: '';
+  width: 14px;
+  height: 10px;
+  background:
+    linear-gradient(#64748b 0 0) top/100% 2px,
+    linear-gradient(#64748b 0 0) center/100% 2px,
+    linear-gradient(#64748b 0 0) bottom/100% 2px;
+  background-repeat: no-repeat;
+}
+
+.drag-handle:active {
+  cursor: grabbing;
+}
+
+.drag-handle:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.drag-handle--compact {
+  border-radius: 6px;
+}
+
+.manager__drag-overlay {
+  pointer-events: none;
+}
+
+.manager__drag-overlay--label {
+  min-width: 180px;
+  max-width: 320px;
+  padding: 12px 16px;
+  border-radius: 14px;
+  background: #ffffff;
+  border: 1px solid #cbd5f5;
+  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.18);
+  color: #0f172a;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.manager__card--overlay,
+.manager__group--overlay,
+.manager__tab--overlay {
+  cursor: grabbing;
+}
+
+.manager__drag-label {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .manager__empty {

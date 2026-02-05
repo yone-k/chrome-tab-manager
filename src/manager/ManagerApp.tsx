@@ -1,4 +1,20 @@
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
+
+import {
+  DndContext,
+  DragOverlay,
+  type CollisionDetection,
+  type DragEndEvent,
+  type DragMoveEvent,
+  type DragStartEvent,
+  PointerSensor,
+  closestCenter,
+  pointerWithin,
+  useDraggable,
+  useDroppable,
+  useSensor,
+  useSensors,
+} from '@dnd-kit/core';
 
 import {
   buildGroupFilterOptions,
@@ -11,9 +27,617 @@ import type { GroupSnapshot, HistorySet, TabSnapshot } from '../tab-manager/type
 import { cleanupHistorySet } from './restoreCleanup';
 import { shouldSuppressRestoreLoading } from './restorePolicy';
 import { createTabRowActions } from './tabRowActions';
+import type { DragItem, DropTarget } from './dragReorder';
+import { applyDragReorder } from './dragReorder';
+import { computeDropGapPx, DEFAULT_DROP_GAP_PX } from './dropGap';
+import { selectDragItemHeight } from './dragHeight';
 import './manager.css';
 
 type LoadState = 'loading' | 'ready' | 'error';
+type DragData = {
+  dragItem: DragItem;
+  dragLabel: string;
+};
+
+type DropItemData =
+  | { type: 'set-zone'; index: number }
+  | { type: 'group-zone'; setId: string; index: number }
+  | { type: 'tab-zone'; setId: string; groupUid: string | null; index: number };
+
+type ActiveDrop = {
+  dropItem: DropItemData;
+  dropTarget: DropTarget;
+  overId: string;
+};
+
+const SET_LIST_GAP_PX = 16;
+const GROUP_LIST_GAP_PX = 16;
+const TAB_LIST_GAP_PX = 10;
+
+const collisionDetection: CollisionDetection = (args) => {
+  const pointerCollisions = pointerWithin(args);
+  if (pointerCollisions.length > 0) {
+    let smallestCollision = pointerCollisions[0];
+    let smallestArea = Number.POSITIVE_INFINITY;
+    for (const collision of pointerCollisions) {
+      const rect = collision.data?.droppableContainer?.rect.current;
+      const area = rect ? rect.width * rect.height : Number.POSITIVE_INFINITY;
+      if (area < smallestArea) {
+        smallestArea = area;
+        smallestCollision = collision;
+      }
+    }
+    return [smallestCollision];
+  }
+  return closestCenter(args);
+};
+
+type DropZoneProps = {
+  id: string;
+  dropItem: DropItemData;
+  activeDrop: ActiveDrop | null;
+  dropGapPx: number;
+  baseGapPx: number;
+  reorderEnabled: boolean;
+};
+
+function DropZone({
+  id,
+  dropItem,
+  activeDrop,
+  dropGapPx,
+  baseGapPx,
+  reorderEnabled,
+}: DropZoneProps) {
+  const { setNodeRef } = useDroppable({
+    id,
+    data: { dropItem },
+    disabled: !reorderEnabled,
+  });
+  const isActive = activeDrop?.overId === id;
+  const height = isActive ? dropGapPx : baseGapPx;
+  return (
+    <div
+      ref={setNodeRef}
+      className={`manager__drop-zone${isActive ? ' manager__drop-zone--active' : ''}`}
+      style={{ height }}
+    />
+  );
+}
+
+function OverlayHandle({ compact }: { compact?: boolean }) {
+  return (
+    <span
+      className={compact ? 'drag-handle drag-handle--compact' : 'drag-handle'}
+      aria-hidden="true"
+    />
+  );
+}
+
+function OverlayTabRow({ tab }: { tab: TabSnapshot }) {
+  return (
+    <div className="manager__tab manager__tab--overlay">
+      <OverlayHandle compact />
+      <div className="manager__tab-main">
+        <p className="manager__tab-title">{tab.title}</p>
+        <p className="manager__tab-url">{tab.url}</p>
+      </div>
+      <div className="manager__tab-actions">
+        <button className="ghost-button" type="button" disabled>
+          削除
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function OverlayGroupSection({ group, tabs }: { group: GroupSnapshot; tabs: TabSnapshot[] }) {
+  return (
+    <section className="manager__group manager__group--overlay">
+      <div className="manager__group-header">
+        <div className="manager__group-header-main">
+          <OverlayHandle compact />
+          <h3 className="manager__group-title">{group.title}</h3>
+        </div>
+        <button className="ghost-button" type="button" disabled>
+          グループを復元
+        </button>
+      </div>
+      <div className="manager__tab-list">
+        {tabs.map((tab) => (
+          <OverlayTabRow key={tab.uid} tab={tab} />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function OverlaySetCard({ set }: { set: HistorySet }) {
+  const groupedTabs = groupTabsById(set.tabs);
+  const totalTabs = set.tabs.length;
+  const tabSummary = `保存済みタブ: ${totalTabs}件`;
+  const groupEntries = set.groups
+    .map((group) => ({ group, tabs: groupedTabs.get(group.id) ?? [] }))
+    .filter((entry) => entry.tabs.length > 0);
+  const ungroupedTabs = groupedTabs.get(null) ?? [];
+
+  return (
+    <article className="manager__card manager__card--overlay">
+      <div className="manager__card-header">
+        <div className="manager__card-header-main">
+          <OverlayHandle />
+          <div>
+            <h2 className="manager__card-title">{formatTimestamp(set.createdAt)}</h2>
+            <p className="manager__card-meta">{tabSummary}</p>
+          </div>
+        </div>
+        <div className="manager__card-actions">
+          <button className="primary-button" type="button" disabled>
+            すべて復元
+          </button>
+          <button className="ghost-button" type="button" disabled>
+            セットを削除
+          </button>
+        </div>
+      </div>
+
+      {groupEntries.map((entry) => (
+        <OverlayGroupSection key={entry.group.uid} group={entry.group} tabs={entry.tabs} />
+      ))}
+
+      {ungroupedTabs.length > 0 ? (
+        <section className="manager__group manager__group--overlay">
+          <div className="manager__group-header">
+            <h3 className="manager__group-title">未グループ</h3>
+          </div>
+          <div className="manager__tab-list">
+            {ungroupedTabs.map((tab) => (
+              <OverlayTabRow key={tab.uid} tab={tab} />
+            ))}
+          </div>
+        </section>
+      ) : null}
+    </article>
+  );
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function isDragItem(value: unknown): value is DragItem {
+  if (!isRecord(value)) {
+    return false;
+  }
+  if (value.type === 'set') {
+    return typeof value.setId === 'string';
+  }
+  if (value.type === 'group') {
+    return typeof value.setId === 'string' && typeof value.groupUid === 'string';
+  }
+  if (value.type === 'tab') {
+    return typeof value.setId === 'string' && typeof value.tabUid === 'string';
+  }
+  return false;
+}
+
+function isDragData(value: unknown): value is DragData {
+  return isRecord(value) && typeof value.dragLabel === 'string' && isDragItem(value.dragItem);
+}
+
+function isDropItemData(value: unknown): value is DropItemData {
+  if (!isRecord(value)) {
+    return false;
+  }
+  if (value.type === 'set-zone') {
+    return typeof value.index === 'number';
+  }
+  if (value.type === 'group-zone') {
+    return typeof value.setId === 'string' && typeof value.index === 'number';
+  }
+  if (value.type === 'tab-zone') {
+    const groupUid = value.groupUid;
+    return (
+      typeof value.setId === 'string' &&
+      typeof value.index === 'number' &&
+      (groupUid === null || typeof groupUid === 'string')
+    );
+  }
+  return false;
+}
+
+function isDropItemPayload(value: unknown): value is { dropItem: DropItemData } {
+  return isRecord(value) && isDropItemData(value.dropItem);
+}
+
+type BodyScrollLockState = {
+  overflow: string;
+  paddingRight: string;
+};
+
+function getScrollbarWidth() {
+  return window.innerWidth - document.documentElement.clientWidth;
+}
+
+function getDragSourceHeight(event: Event | null) {
+  if (!event) {
+    return null;
+  }
+  const target = event.target;
+  if (!(target instanceof Element)) {
+    return null;
+  }
+  const source = target.closest('.manager__card, .manager__group, .manager__tab');
+  if (!source) {
+    return null;
+  }
+  const height = source.getBoundingClientRect().height;
+  return height > 0 ? height : null;
+}
+
+function buildDropTarget(dropItem: DropItemData): DropTarget {
+  if (dropItem.type === 'set-zone') {
+    return { type: 'set-list', index: dropItem.index };
+  }
+  if (dropItem.type === 'group-zone') {
+    return { type: 'group-list', setId: dropItem.setId, index: dropItem.index };
+  }
+  return {
+    type: 'tab-list',
+    setId: dropItem.setId,
+    groupUid: dropItem.groupUid,
+    index: dropItem.index,
+  };
+}
+
+type TabRowActions = ReturnType<typeof createTabRowActions<TabSnapshot>>;
+
+type TabRowProps = {
+  tab: TabSnapshot;
+  setId: string;
+  reorderEnabled: boolean;
+  rowActions: TabRowActions;
+};
+
+function TabRow({ tab, setId, reorderEnabled, rowActions }: TabRowProps) {
+  const {
+    setNodeRef: setDragRef,
+    attributes,
+    listeners,
+    isDragging,
+  } = useDraggable({
+    id: `tab:${tab.uid}`,
+    data: {
+      dragItem: { type: 'tab', setId, tabUid: tab.uid },
+      dragLabel: tab.title,
+    },
+    disabled: !reorderEnabled,
+  });
+
+  return (
+    <li
+      ref={setDragRef}
+      className={`manager__tab manager__tab--clickable${
+        isDragging ? ' manager__tab--dragging' : ''
+      }`}
+      role="button"
+      tabIndex={0}
+      aria-label={`${tab.title}を開く`}
+      onClick={rowActions.handleRowClick(tab)}
+      onKeyDown={rowActions.handleRowKeyDown(tab)}
+    >
+      <button
+        className="drag-handle drag-handle--compact"
+        type="button"
+        aria-label="タブを並び替え"
+        onClick={(event) => event.stopPropagation()}
+        disabled={!reorderEnabled}
+        {...attributes}
+        {...listeners}
+      />
+      <div className="manager__tab-main">
+        <p className="manager__tab-title">{tab.title}</p>
+        <p className="manager__tab-url">{tab.url}</p>
+      </div>
+      <div className="manager__tab-actions">
+        <button className="ghost-button" type="button" onClick={rowActions.handleRemoveClick(tab)}>
+          削除
+        </button>
+      </div>
+    </li>
+  );
+}
+
+type TabListProps = {
+  tabs: TabSnapshot[];
+  setId: string;
+  groupUid: string | null;
+  reorderEnabled: boolean;
+  rowActions: TabRowActions;
+  activeDrop: ActiveDrop | null;
+  dropGapPx: number;
+};
+
+function TabList({
+  tabs,
+  setId,
+  groupUid,
+  reorderEnabled,
+  rowActions,
+  activeDrop,
+  dropGapPx,
+}: TabListProps) {
+  return (
+    <ul className="manager__tab-list">
+      <DropZone
+        id={`zone:tab:${setId}:${groupUid ?? 'ungrouped'}:0`}
+        dropItem={{ type: 'tab-zone', setId, groupUid, index: 0 }}
+        activeDrop={activeDrop}
+        dropGapPx={dropGapPx}
+        baseGapPx={TAB_LIST_GAP_PX}
+        reorderEnabled={reorderEnabled}
+      />
+      {tabs.map((tab, index) => (
+        <Fragment key={tab.uid}>
+          <TabRow tab={tab} setId={setId} reorderEnabled={reorderEnabled} rowActions={rowActions} />
+          <DropZone
+            id={`zone:tab:${setId}:${groupUid ?? 'ungrouped'}:${index + 1}`}
+            dropItem={{ type: 'tab-zone', setId, groupUid, index: index + 1 }}
+            activeDrop={activeDrop}
+            dropGapPx={dropGapPx}
+            baseGapPx={TAB_LIST_GAP_PX}
+            reorderEnabled={reorderEnabled}
+          />
+        </Fragment>
+      ))}
+    </ul>
+  );
+}
+
+type GroupListEntry = {
+  group: GroupSnapshot;
+  tabs: TabSnapshot[];
+};
+
+type GroupListProps = {
+  entries: GroupListEntry[];
+  setId: string;
+  reorderEnabled: boolean;
+  onRestoreGroup: (groupId: number) => void;
+  rowActions: TabRowActions;
+  activeDrop: ActiveDrop | null;
+  dropGapPx: number;
+};
+
+function GroupList({
+  entries,
+  setId,
+  reorderEnabled,
+  onRestoreGroup,
+  rowActions,
+  activeDrop,
+  dropGapPx,
+}: GroupListProps) {
+  return (
+    <div className="manager__group-list">
+      <DropZone
+        id={`zone:group:${setId}:0`}
+        dropItem={{ type: 'group-zone', setId, index: 0 }}
+        activeDrop={activeDrop}
+        dropGapPx={dropGapPx}
+        baseGapPx={GROUP_LIST_GAP_PX}
+        reorderEnabled={reorderEnabled}
+      />
+      {entries.map((entry, index) => (
+        <Fragment key={entry.group.uid}>
+          <GroupSection
+            setId={setId}
+            group={entry.group}
+            tabs={entry.tabs}
+            reorderEnabled={reorderEnabled}
+            onRestoreGroup={onRestoreGroup}
+            rowActions={rowActions}
+            activeDrop={activeDrop}
+            dropGapPx={dropGapPx}
+          />
+          <DropZone
+            id={`zone:group:${setId}:${index + 1}`}
+            dropItem={{ type: 'group-zone', setId, index: index + 1 }}
+            activeDrop={activeDrop}
+            dropGapPx={dropGapPx}
+            baseGapPx={GROUP_LIST_GAP_PX}
+            reorderEnabled={reorderEnabled}
+          />
+        </Fragment>
+      ))}
+    </div>
+  );
+}
+
+type GroupSectionProps = {
+  setId: string;
+  group: GroupSnapshot;
+  tabs: TabSnapshot[];
+  reorderEnabled: boolean;
+  onRestoreGroup: (groupId: number) => void;
+  rowActions: TabRowActions;
+  activeDrop: ActiveDrop | null;
+  dropGapPx: number;
+};
+
+function GroupSection({
+  setId,
+  group,
+  tabs,
+  reorderEnabled,
+  onRestoreGroup,
+  rowActions,
+  activeDrop,
+  dropGapPx,
+}: GroupSectionProps) {
+  const {
+    setNodeRef: setDragRef,
+    attributes,
+    listeners,
+    isDragging,
+  } = useDraggable({
+    id: `group:${group.uid}`,
+    data: {
+      dragItem: { type: 'group', setId, groupUid: group.uid },
+      dragLabel: group.title,
+    },
+    disabled: !reorderEnabled,
+  });
+
+  return (
+    <section
+      ref={setDragRef}
+      className={`manager__group${isDragging ? ' manager__group--dragging' : ''}`}
+    >
+      <div className="manager__group-header">
+        <div className="manager__group-header-main">
+          <button
+            className="drag-handle drag-handle--compact"
+            type="button"
+            aria-label="グループを並び替え"
+            onClick={(event) => event.stopPropagation()}
+            disabled={!reorderEnabled}
+            {...attributes}
+            {...listeners}
+          />
+          <h3 className="manager__group-title">{group.title}</h3>
+        </div>
+        <button className="ghost-button" type="button" onClick={() => onRestoreGroup(group.id)}>
+          グループを復元
+        </button>
+      </div>
+      <TabList
+        tabs={tabs}
+        setId={setId}
+        groupUid={group.uid}
+        reorderEnabled={reorderEnabled}
+        rowActions={rowActions}
+        activeDrop={activeDrop}
+        dropGapPx={dropGapPx}
+      />
+    </section>
+  );
+}
+
+type SetCardProps = {
+  set: HistorySet;
+  fullSet?: HistorySet;
+  reorderEnabled: boolean;
+  onRestoreSet: () => void;
+  onDeleteSet: () => void;
+  onRestoreGroup: (groupId: number) => void;
+  rowActions: TabRowActions;
+  activeDrop: ActiveDrop | null;
+  dropGapPx: number;
+};
+
+function SetCard({
+  set,
+  fullSet,
+  reorderEnabled,
+  onRestoreSet,
+  onDeleteSet,
+  onRestoreGroup,
+  rowActions,
+  activeDrop,
+  dropGapPx,
+}: SetCardProps) {
+  const groupedTabs = groupTabsById(set.tabs);
+  const totalTabs = fullSet?.tabs.length ?? set.tabs.length;
+  const visibleTabs = set.tabs.length;
+  const tabSummary =
+    totalTabs === visibleTabs
+      ? `保存済みタブ: ${visibleTabs}件`
+      : `表示中: ${visibleTabs} / ${totalTabs}件`;
+  const dragLabel = formatTimestamp(set.createdAt);
+  const {
+    setNodeRef: setDragRef,
+    attributes,
+    listeners,
+    isDragging,
+  } = useDraggable({
+    id: `set:${set.id}`,
+    data: {
+      dragItem: { type: 'set', setId: set.id },
+      dragLabel,
+    },
+    disabled: !reorderEnabled,
+  });
+
+  const groupEntries = set.groups
+    .map((group) => ({ group, tabs: groupedTabs.get(group.id) ?? [] }))
+    .filter((entry) => entry.tabs.length > 0);
+  const ungroupedTabs = groupedTabs.get(null) ?? [];
+  const shouldShowUngrouped = ungroupedTabs.length > 0;
+  const shouldShowGroupList = reorderEnabled || groupEntries.length > 0;
+
+  return (
+    <article
+      ref={setDragRef}
+      className={`manager__card${isDragging ? ' manager__card--dragging' : ''}`}
+    >
+      <div className="manager__card-header">
+        <div className="manager__card-header-main">
+          <button
+            className="drag-handle"
+            type="button"
+            aria-label="セッションを並び替え"
+            onClick={(event) => event.stopPropagation()}
+            disabled={!reorderEnabled}
+            {...attributes}
+            {...listeners}
+          />
+          <div>
+            <h2 className="manager__card-title">{dragLabel}</h2>
+            <p className="manager__card-meta">{tabSummary}</p>
+          </div>
+        </div>
+        <div className="manager__card-actions">
+          <button className="primary-button" type="button" onClick={onRestoreSet}>
+            すべて復元
+          </button>
+          <button className="ghost-button" type="button" onClick={onDeleteSet}>
+            セットを削除
+          </button>
+        </div>
+      </div>
+
+      {shouldShowGroupList ? (
+        <GroupList
+          entries={groupEntries}
+          setId={set.id}
+          reorderEnabled={reorderEnabled}
+          onRestoreGroup={onRestoreGroup}
+          rowActions={rowActions}
+          activeDrop={activeDrop}
+          dropGapPx={dropGapPx}
+        />
+      ) : null}
+
+      {shouldShowUngrouped ? (
+        <section className="manager__group">
+          <div className="manager__group-header">
+            <h3 className="manager__group-title">未グループ</h3>
+          </div>
+          <TabList
+            tabs={ungroupedTabs}
+            setId={set.id}
+            groupUid={null}
+            reorderEnabled={reorderEnabled}
+            rowActions={rowActions}
+            activeDrop={activeDrop}
+            dropGapPx={dropGapPx}
+          />
+        </section>
+      ) : null}
+    </article>
+  );
+}
 
 function formatTimestamp(timestamp: number) {
   return new Date(timestamp).toLocaleString();
@@ -253,6 +877,19 @@ export function ManagerApp() {
   const [query, setQuery] = useState('');
   const [groupFilter, setGroupFilter] = useState(GROUP_FILTER_ALL);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [activeDrag, setActiveDrag] = useState<DragData | null>(null);
+  const [activeDrop, setActiveDrop] = useState<ActiveDrop | null>(null);
+  const [dropGapPx, setDropGapPx] = useState(DEFAULT_DROP_GAP_PX);
+  const [dragSpacerPx, setDragSpacerPx] = useState(0);
+  const dragLatestScrollYRef = useRef<number | null>(null);
+  const bodyScrollLockRef = useRef<BodyScrollLockState | null>(null);
+
+  const reorderEnabled = query.trim() === '' && groupFilter === GROUP_FILTER_ALL;
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: { distance: 4 },
+    }),
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -301,7 +938,60 @@ export function ManagerApp() {
     return filterHistorySets(state.data, { query, groupFilter });
   }, [groupFilter, query, state]);
 
-  const fullSets = state.status === 'ready' && state.data ? state.data : [];
+  const fullSets = useMemo(
+    () => (state.status === 'ready' && state.data ? state.data : []),
+    [state],
+  );
+  const visibleSets = reorderEnabled ? fullSets : filteredSets;
+  const overlayContent = useMemo(() => {
+    if (!activeDrag) {
+      return null;
+    }
+
+    const { dragItem, dragLabel } = activeDrag;
+
+    if (dragItem.type === 'set') {
+      const set = fullSets.find((item) => item.id === dragItem.setId);
+      if (set) {
+        return (
+          <div className="manager__drag-overlay">
+            <OverlaySetCard set={set} />
+          </div>
+        );
+      }
+    }
+
+    if (dragItem.type === 'group') {
+      const set = fullSets.find((item) => item.id === dragItem.setId);
+      const group = set?.groups.find((item) => item.uid === dragItem.groupUid);
+      if (set && group) {
+        const tabs = set.tabs.filter((tab) => tab.groupId === group.id);
+        return (
+          <div className="manager__drag-overlay">
+            <OverlayGroupSection group={group} tabs={tabs} />
+          </div>
+        );
+      }
+    }
+
+    if (dragItem.type === 'tab') {
+      const set = fullSets.find((item) => item.id === dragItem.setId);
+      const tab = set?.tabs.find((item) => item.uid === dragItem.tabUid);
+      if (tab) {
+        return (
+          <div className="manager__drag-overlay">
+            <OverlayTabRow tab={tab} />
+          </div>
+        );
+      }
+    }
+
+    return (
+      <div className="manager__drag-overlay manager__drag-overlay--label">
+        <span className="manager__drag-label">{dragLabel}</span>
+      </div>
+    );
+  }, [activeDrag, fullSets]);
 
   const groupOptions = useMemo(() => {
     if (state.status !== 'ready' || !state.data) {
@@ -317,6 +1007,139 @@ export function ManagerApp() {
       restoreLoadingSuppressionEnabled: current.restoreLoadingSuppressionEnabled ?? true,
       removeRestoredTabsEnabled: current.removeRestoredTabsEnabled ?? true,
     }));
+  };
+
+  const lockBodyScroll = () => {
+    if (bodyScrollLockRef.current) {
+      return;
+    }
+    const body = document.body;
+    const computedPaddingRight = Number.parseFloat(getComputedStyle(body).paddingRight || '0') || 0;
+    const scrollbarWidth = getScrollbarWidth();
+    bodyScrollLockRef.current = {
+      overflow: body.style.overflow,
+      paddingRight: body.style.paddingRight,
+    };
+    body.style.overflow = 'hidden';
+    if (scrollbarWidth > 0) {
+      body.style.paddingRight = `${computedPaddingRight + scrollbarWidth}px`;
+    }
+  };
+
+  const unlockBodyScroll = () => {
+    const saved = bodyScrollLockRef.current;
+    if (!saved) {
+      return;
+    }
+    const body = document.body;
+    body.style.overflow = saved.overflow;
+    body.style.paddingRight = saved.paddingRight;
+    bodyScrollLockRef.current = null;
+  };
+
+  const handleDragStart = (event: DragStartEvent) => {
+    if (!reorderEnabled) {
+      return;
+    }
+    lockBodyScroll();
+    dragLatestScrollYRef.current = window.scrollY;
+    const data = event.active.data.current;
+    if (!isDragData(data)) {
+      setDropGapPx(DEFAULT_DROP_GAP_PX);
+      setDragSpacerPx(0);
+      unlockBodyScroll();
+      return;
+    }
+    const rect = event.active.rect.current;
+    const height = selectDragItemHeight({
+      eventTargetHeight: getDragSourceHeight(event.activatorEvent),
+      rectInitialHeight: rect?.initial?.height ?? null,
+      rectTranslatedHeight: rect?.translated?.height ?? null,
+    });
+    setDropGapPx(computeDropGapPx(height));
+    setDragSpacerPx(height ?? 0);
+    setActiveDrag(data);
+    setActiveDrop(null);
+  };
+
+  const handleDragMove = (event: DragMoveEvent) => {
+    if (!reorderEnabled) {
+      return;
+    }
+    dragLatestScrollYRef.current = window.scrollY;
+    const over = event.over;
+    const dropData = over?.data.current;
+    if (!over || !isDropItemPayload(dropData)) {
+      setActiveDrop(null);
+      return;
+    }
+    const dropTarget = buildDropTarget(dropData.dropItem);
+    setActiveDrop({
+      dropItem: dropData.dropItem,
+      dropTarget,
+      overId: String(over.id),
+    });
+  };
+
+  const handleDragCancel = () => {
+    setActiveDrag(null);
+    setActiveDrop(null);
+    dragLatestScrollYRef.current = null;
+    setDropGapPx(DEFAULT_DROP_GAP_PX);
+    setDragSpacerPx(0);
+    unlockBodyScroll();
+  };
+
+  const handleDragEnd = async (event: DragEndEvent) => {
+    if (!reorderEnabled) {
+      setActiveDrag(null);
+      setActiveDrop(null);
+      dragLatestScrollYRef.current = null;
+      setDropGapPx(DEFAULT_DROP_GAP_PX);
+      setDragSpacerPx(0);
+      unlockBodyScroll();
+      return;
+    }
+    const data = event.active.data.current;
+    const dropTarget = activeDrop?.dropTarget ?? null;
+    if (!isDragData(data) || !dropTarget) {
+      setActiveDrag(null);
+      setActiveDrop(null);
+      dragLatestScrollYRef.current = null;
+      setDropGapPx(DEFAULT_DROP_GAP_PX);
+      setDragSpacerPx(0);
+      unlockBodyScroll();
+      return;
+    }
+
+    const nextSets = applyDragReorder(fullSets, data.dragItem, dropTarget);
+    if (nextSets === fullSets) {
+      setActiveDrag(null);
+      setActiveDrop(null);
+      dragLatestScrollYRef.current = null;
+      setDropGapPx(DEFAULT_DROP_GAP_PX);
+      setDragSpacerPx(0);
+      unlockBodyScroll();
+      return;
+    }
+
+    const updated = await updateState((current) => ({
+      ...current,
+      historySets: nextSets,
+    }));
+    await refreshState(updated.historySets);
+    setActiveDrag(null);
+    setActiveDrop(null);
+    const scrollY = dragLatestScrollYRef.current;
+    dragLatestScrollYRef.current = null;
+    setDropGapPx(DEFAULT_DROP_GAP_PX);
+    setDragSpacerPx(0);
+    unlockBodyScroll();
+    if (scrollY !== null) {
+      requestAnimationFrame(() => {
+        window.scrollTo({ top: scrollY });
+      });
+    }
   };
 
   const restoreLoadingSuppressionEnabled = state.restoreLoadingSuppressionEnabled ?? true;
@@ -337,9 +1160,7 @@ export function ManagerApp() {
         if (set.id !== setId) {
           return set;
         }
-        const filteredTabs = set.tabs.filter(
-          (tab) => !(tab.index === tabToDelete.index && tab.url === tabToDelete.url),
-        );
+        const filteredTabs = set.tabs.filter((tab) => tab.uid !== tabToDelete.uid);
         const remainingGroupIds = new Set(
           filteredTabs.map((tab) => tab.groupId).filter((id): id is number => id !== null),
         );
@@ -481,180 +1302,111 @@ export function ManagerApp() {
   }
 
   return (
-    <div className="manager">
-      <header className="manager__header">
-        <div className="manager__header-top">
-          <span className="manager__badge">タブマネージャー</span>
-          <a
-            className="ghost-button manager__options-link"
-            href={optionsUrl}
-            target="_blank"
-            rel="noreferrer"
+    <DndContext
+      sensors={sensors}
+      collisionDetection={collisionDetection}
+      onDragStart={handleDragStart}
+      onDragMove={handleDragMove}
+      onDragCancel={handleDragCancel}
+      onDragEnd={handleDragEnd}
+    >
+      <div className="manager">
+        <header className="manager__header">
+          <div className="manager__header-top">
+            <span className="manager__badge">タブマネージャー</span>
+            <a
+              className="ghost-button manager__options-link"
+              href={optionsUrl}
+              target="_blank"
+              rel="noreferrer"
+            >
+              設定
+            </a>
+          </div>
+          <h1 className="manager__title">保存済みのタブセッション</h1>
+          <p className="manager__subtitle">
+            保存済みのタブセッションを復元・検索・フィルタできます。
+          </p>
+        </header>
+
+        <section className="manager__controls">
+          <input
+            className="manager__search"
+            type="search"
+            placeholder="タイトルまたはURLで検索"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+          />
+          <select
+            className="manager__select"
+            value={groupFilter}
+            onChange={(event) => setGroupFilter(event.target.value)}
           >
-            設定
-          </a>
-        </div>
-        <h1 className="manager__title">保存済みのタブセッション</h1>
-        <p className="manager__subtitle">
-          保存済みのタブセッションを復元・検索・フィルタできます。
-        </p>
-      </header>
+            {groupOptions.map((option) => (
+              <option key={option} value={option}>
+                {option === GROUP_FILTER_ALL
+                  ? 'すべてのグループ'
+                  : option === GROUP_FILTER_UNGROUPED
+                    ? '未グループ'
+                    : option}
+              </option>
+            ))}
+          </select>
+          {actionMessage ? <span className="manager__status">{actionMessage}</span> : null}
+        </section>
 
-      <section className="manager__controls">
-        <input
-          className="manager__search"
-          type="search"
-          placeholder="タイトルまたはURLで検索"
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-        />
-        <select
-          className="manager__select"
-          value={groupFilter}
-          onChange={(event) => setGroupFilter(event.target.value)}
+        <main
+          className="manager__content"
+          style={dragSpacerPx > 0 ? { paddingBottom: dragSpacerPx } : undefined}
         >
-          {groupOptions.map((option) => (
-            <option key={option} value={option}>
-              {option === GROUP_FILTER_ALL
-                ? 'すべてのグループ'
-                : option === GROUP_FILTER_UNGROUPED
-                  ? '未グループ'
-                  : option}
-            </option>
-          ))}
-        </select>
-        {actionMessage ? <span className="manager__status">{actionMessage}</span> : null}
-      </section>
+          {visibleSets.length === 0 ? (
+            <p className="manager__empty">現在のフィルタに一致するタブがありません。</p>
+          ) : (
+            <>
+              <DropZone
+                id="zone:set:0"
+                dropItem={{ type: 'set-zone', index: 0 }}
+                activeDrop={activeDrop}
+                dropGapPx={dropGapPx}
+                baseGapPx={SET_LIST_GAP_PX}
+                reorderEnabled={reorderEnabled}
+              />
+              {visibleSets.map((set, setIndex) => {
+                const fullSet = fullSets.find((item) => item.id === set.id);
+                const rowActions = createTabRowActions<TabSnapshot>({
+                  onOpen: handleRestoreTab,
+                  onRemove: (tab) => handleDeleteTab(set.id, tab),
+                });
 
-      <main className="manager__content">
-        {filteredSets.length === 0 ? (
-          <p className="manager__empty">現在のフィルタに一致するタブがありません。</p>
-        ) : (
-          filteredSets.map((set) => {
-            const groupedTabs = groupTabsById(set.tabs);
-            const fullSet = fullSets.find((item) => item.id === set.id);
-            const totalTabs = fullSet?.tabs.length ?? set.tabs.length;
-            const visibleTabs = set.tabs.length;
-            const tabSummary =
-              totalTabs === visibleTabs
-                ? `保存済みタブ: ${visibleTabs}件`
-                : `表示中: ${visibleTabs} / ${totalTabs}件`;
-            const rowActions = createTabRowActions<TabSnapshot>({
-              onOpen: handleRestoreTab,
-              onRemove: (tab) => handleDeleteTab(set.id, tab),
-            });
-            return (
-              <article key={set.id} className="manager__card">
-                <div className="manager__card-header">
-                  <div>
-                    <h2 className="manager__card-title">{formatTimestamp(set.createdAt)}</h2>
-                    <p className="manager__card-meta">{tabSummary}</p>
-                  </div>
-                  <div className="manager__card-actions">
-                    <button
-                      className="primary-button"
-                      type="button"
-                      onClick={() => handleRestoreSet(set)}
-                    >
-                      すべて復元
-                    </button>
-                    <button
-                      className="ghost-button"
-                      type="button"
-                      onClick={() => handleDeleteSet(set.id)}
-                    >
-                      セットを削除
-                    </button>
-                  </div>
-                </div>
-
-                {set.groups.map((group) => {
-                  const tabs = groupedTabs.get(group.id) ?? [];
-                  if (tabs.length === 0) {
-                    return null;
-                  }
-                  return (
-                    <section key={group.id} className="manager__group">
-                      <div className="manager__group-header">
-                        <h3 className="manager__group-title">{group.title}</h3>
-                        <button
-                          className="ghost-button"
-                          type="button"
-                          onClick={() => handleRestoreGroup(set, group.id)}
-                        >
-                          グループを復元
-                        </button>
-                      </div>
-                      <ul className="manager__tab-list">
-                        {tabs.map((tab) => (
-                          <li
-                            key={`${tab.url}-${tab.index}`}
-                            className="manager__tab manager__tab--clickable"
-                            role="button"
-                            tabIndex={0}
-                            aria-label={`${tab.title}を開く`}
-                            onClick={rowActions.handleRowClick(tab)}
-                            onKeyDown={rowActions.handleRowKeyDown(tab)}
-                          >
-                            <div className="manager__tab-main">
-                              <p className="manager__tab-title">{tab.title}</p>
-                              <p className="manager__tab-url">{tab.url}</p>
-                            </div>
-                            <div className="manager__tab-actions">
-                              <button
-                                className="ghost-button"
-                                type="button"
-                                onClick={rowActions.handleRemoveClick(tab)}
-                              >
-                                削除
-                              </button>
-                            </div>
-                          </li>
-                        ))}
-                      </ul>
-                    </section>
-                  );
-                })}
-
-                {groupedTabs.has(null) ? (
-                  <section className="manager__group">
-                    <div className="manager__group-header">
-                      <h3 className="manager__group-title">未グループ</h3>
-                    </div>
-                    <ul className="manager__tab-list">
-                      {(groupedTabs.get(null) ?? []).map((tab) => (
-                        <li
-                          key={`${tab.url}-${tab.index}`}
-                          className="manager__tab manager__tab--clickable"
-                          role="button"
-                          tabIndex={0}
-                          aria-label={`${tab.title}を開く`}
-                          onClick={rowActions.handleRowClick(tab)}
-                          onKeyDown={rowActions.handleRowKeyDown(tab)}
-                        >
-                          <div className="manager__tab-main">
-                            <p className="manager__tab-title">{tab.title}</p>
-                            <p className="manager__tab-url">{tab.url}</p>
-                          </div>
-                          <div className="manager__tab-actions">
-                            <button
-                              className="ghost-button"
-                              type="button"
-                              onClick={rowActions.handleRemoveClick(tab)}
-                            >
-                              削除
-                            </button>
-                          </div>
-                        </li>
-                      ))}
-                    </ul>
-                  </section>
-                ) : null}
-              </article>
-            );
-          })
-        )}
-      </main>
-    </div>
+                return (
+                  <Fragment key={set.id}>
+                    <SetCard
+                      set={set}
+                      fullSet={fullSet}
+                      reorderEnabled={reorderEnabled}
+                      onRestoreSet={() => handleRestoreSet(set)}
+                      onDeleteSet={() => handleDeleteSet(set.id)}
+                      onRestoreGroup={(groupId) => handleRestoreGroup(set, groupId)}
+                      rowActions={rowActions}
+                      activeDrop={activeDrop}
+                      dropGapPx={dropGapPx}
+                    />
+                    <DropZone
+                      id={`zone:set:${setIndex + 1}`}
+                      dropItem={{ type: 'set-zone', index: setIndex + 1 }}
+                      activeDrop={activeDrop}
+                      dropGapPx={dropGapPx}
+                      baseGapPx={SET_LIST_GAP_PX}
+                      reorderEnabled={reorderEnabled}
+                    />
+                  </Fragment>
+                );
+              })}
+            </>
+          )}
+        </main>
+      </div>
+      <DragOverlay dropAnimation={null}>{overlayContent}</DragOverlay>
+    </DndContext>
   );
 }

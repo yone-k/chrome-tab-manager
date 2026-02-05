@@ -14,23 +14,23 @@ const historySets: HistorySet[] = [
     createdAt: 1,
     windowId: 1,
     groups: [
-      { id: 1, title: 'Work', color: 'blue', index: 0 },
-      { id: 2, title: 'Read', color: 'red', index: 1 },
+      { uid: 'g-1', id: 1, title: 'Work', color: 'blue', index: 0 },
+      { uid: 'g-2', id: 2, title: 'Read', color: 'red', index: 1 },
     ],
     tabs: [
-      { title: 'Docs', url: 'https://docs.example.com', index: 0, groupId: 1 },
-      { title: 'Mail', url: 'https://mail.example.com', index: 1, groupId: 1 },
-      { title: 'News', url: 'https://news.example.com', index: 2, groupId: null },
+      { uid: 't-1', title: 'Docs', url: 'https://docs.example.com', index: 0, groupId: 1 },
+      { uid: 't-2', title: 'Mail', url: 'https://mail.example.com', index: 1, groupId: 1 },
+      { uid: 't-3', title: 'News', url: 'https://news.example.com', index: 2, groupId: null },
     ],
   },
   {
     id: 'set-2',
     createdAt: 2,
     windowId: 2,
-    groups: [{ id: 3, title: 'Read', color: 'green', index: 0 }],
+    groups: [{ uid: 'g-3', id: 3, title: 'Read', color: 'green', index: 0 }],
     tabs: [
-      { title: 'Blog', url: 'https://blog.example.com', index: 0, groupId: 3 },
-      { title: 'Docs', url: 'https://docs.other.com', index: 1, groupId: null },
+      { uid: 't-4', title: 'Blog', url: 'https://blog.example.com', index: 0, groupId: 3 },
+      { uid: 't-5', title: 'Docs', url: 'https://docs.other.com', index: 1, groupId: null },
     ],
   },
 ];

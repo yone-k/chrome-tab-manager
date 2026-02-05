@@ -1,4 +1,5 @@
 import type { GroupSnapshot, HistorySet, TabSnapshot } from './types';
+import { createUid } from './uid';
 
 export type TabInput = {
   title?: string;
@@ -28,6 +29,7 @@ function normalizeTab(tab: TabInput): TabSnapshot {
   const groupId = tab.groupId !== undefined && tab.groupId >= 0 ? tab.groupId : null;
 
   return {
+    uid: createUid('tab'),
     title,
     url,
     index: tab.index,
@@ -37,6 +39,7 @@ function normalizeTab(tab: TabInput): TabSnapshot {
 
 function normalizeGroup(group: GroupInput, fallbackIndex: number): GroupSnapshot {
   return {
+    uid: createUid('group'),
     id: group.id,
     title: group.title?.trim() || 'Untitled Group',
     color: group.color ?? 'grey',

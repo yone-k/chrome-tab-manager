@@ -8,22 +8,22 @@ const sampleSet: HistorySet = {
   createdAt: 1,
   windowId: 1,
   groups: [
-    { id: 1, title: 'Work', color: 'blue', index: 0 },
-    { id: 2, title: 'Read', color: 'red', index: 1 },
+    { uid: 'g-1', id: 1, title: 'Work', color: 'blue', index: 0 },
+    { uid: 'g-2', id: 2, title: 'Read', color: 'red', index: 1 },
   ],
   tabs: [
-    { title: 'Docs', url: 'https://docs.example.com', index: 0, groupId: 1 },
-    { title: 'Mail', url: 'https://mail.example.com', index: 1, groupId: 1 },
-    { title: 'News', url: 'https://news.example.com', index: 2, groupId: null },
-    { title: 'Blog', url: 'https://blog.example.com', index: 3, groupId: 2 },
+    { uid: 't-1', title: 'Docs', url: 'https://docs.example.com', index: 0, groupId: 1 },
+    { uid: 't-2', title: 'Mail', url: 'https://mail.example.com', index: 1, groupId: 1 },
+    { uid: 't-3', title: 'News', url: 'https://news.example.com', index: 2, groupId: null },
+    { uid: 't-4', title: 'Blog', url: 'https://blog.example.com', index: 3, groupId: 2 },
   ],
 };
 
 describe('cleanupHistorySet', () => {
   it('復元済みタブを削除し、空のグループを取り除く', () => {
     const restored: TabSnapshot[] = [
-      { title: 'Docs', url: 'https://docs.example.com', index: 0, groupId: 1 },
-      { title: 'Blog', url: 'https://blog.example.com', index: 3, groupId: 2 },
+      { uid: 't-1', title: 'Docs', url: 'https://docs.example.com', index: 0, groupId: 1 },
+      { uid: 't-4', title: 'Blog', url: 'https://blog.example.com', index: 3, groupId: 2 },
     ];
 
     const result = cleanupHistorySet(sampleSet, restored);
