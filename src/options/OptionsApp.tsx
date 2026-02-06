@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 
+import { Button } from '../components/Button';
 import { DEFAULT_EXCLUSIONS, normalizeExclusions } from '../tab-manager/exclusions';
 import { getState, updateState } from '../tab-manager/storage';
 import './options.css';
@@ -140,12 +141,12 @@ export function OptionsApp() {
 
       <div className="options__footer">
         <div className="options__actions">
-          <button className="primary-button" type="button" onClick={handleSave}>
+          <Button variant="primary" onClick={handleSave}>
             保存
-          </button>
-          <button className="ghost-button" type="button" onClick={handleReset}>
+          </Button>
+          <Button variant="ghost" onClick={handleReset}>
             初期設定に戻す
-          </button>
+          </Button>
           <span className="options__status" aria-live="polite">
             {status === 'saving' && '保存中...'}
             {status === 'saved' && '保存しました。'}

@@ -16,16 +16,16 @@ body {
 }
 
 #root {
-  padding: 24px;
+  padding: 10px;
   overflow-x: hidden;
 }
 
 .manager {
-  width: min(100%, 960px);
-  max-width: 960px;
+  width: min(100%, 1200px);
+  max-width: 1200px;
   margin: 0 auto;
   display: grid;
-  gap: 20px;
+  gap: 8px;
 }
 
 .manager--center {
@@ -36,64 +36,64 @@ body {
 
 .manager__header {
   display: grid;
-  gap: 8px;
+  gap: 4px;
 }
 
 .manager__header-top {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 6px;
   flex-wrap: wrap;
 }
 
 .manager__badge {
   width: fit-content;
-  padding: 4px 12px;
+  padding: 2px 8px;
   border-radius: 999px;
   background: #1d4ed8;
   color: #fff;
-  font-size: 12px;
+  font-size: 10px;
   letter-spacing: 0.05em;
   text-transform: uppercase;
 }
 
 .manager__title {
   margin: 0;
-  font-size: 28px;
+  font-size: 20px;
 }
 
 .manager__subtitle {
   margin: 0;
   color: #475569;
-  font-size: 14px;
+  font-size: 11px;
 }
 
 .manager__controls {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px;
+  gap: 6px;
   align-items: center;
 }
 
 .manager__search {
-  flex: 1 1 260px;
-  padding: 10px 12px;
-  border-radius: 12px;
+  flex: 1 1 220px;
+  padding: 6px 8px;
+  border-radius: 8px;
   border: 1px solid #cbd5f5;
-  font-size: 14px;
+  font-size: 12px;
 }
 
 .manager__select {
-  padding: 10px 12px;
-  border-radius: 12px;
+  padding: 6px 8px;
+  border-radius: 8px;
   border: 1px solid #cbd5f5;
-  font-size: 14px;
+  font-size: 12px;
   background: #fff;
 }
 
 .manager__status {
-  font-size: 12px;
+  font-size: 10px;
   color: #475569;
 }
 
@@ -103,18 +103,18 @@ body {
 }
 
 .manager__card {
-  padding: 18px;
+  padding: 10px;
   background: #fff;
-  border-radius: 16px;
-  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.08);
+  border-radius: 10px;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.07);
   display: grid;
-  gap: 16px;
+  gap: 6px;
 }
 
 .manager__card-header {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px;
+  gap: 6px;
   align-items: center;
   justify-content: space-between;
 }
@@ -122,12 +122,12 @@ body {
 .manager__card-header-main {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 6px;
 }
 
 .manager__card-title {
   margin: 0;
-  font-size: 18px;
+  font-size: 14px;
 }
 
 .manager__card-title-button {
@@ -145,30 +145,30 @@ body {
 }
 
 .manager__card-title-input {
-  font-size: 18px;
-  padding: 6px 8px;
-  border-radius: 8px;
+  font-size: 14px;
+  padding: 3px 5px;
+  border-radius: 6px;
   border: 1px solid #cbd5f5;
-  min-width: 220px;
+  min-width: 160px;
 }
 
 .manager__card-meta {
   margin: 0;
-  font-size: 12px;
+  font-size: 10px;
   color: #64748b;
 }
 
 .manager__card-actions {
   display: flex;
-  gap: 10px;
+  gap: 4px;
   flex-wrap: wrap;
 }
 
 .manager__group {
   display: grid;
-  gap: 8px;
-  padding: 12px;
-  border-radius: 14px;
+  gap: 4px;
+  padding: 6px;
+  border-radius: 8px;
   border: 1px solid #e2e8f0;
   background: #ffffff;
 }
@@ -177,18 +177,18 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 6px;
 }
 
 .manager__group-header-main {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 6px;
 }
 
 .manager__group-title {
   margin: 0;
-  font-size: 16px;
+  font-size: 13px;
 }
 
 .manager__group-title-button {
@@ -206,28 +206,28 @@ body {
 }
 
 .manager__group-title-input {
-  font-size: 16px;
-  padding: 6px 8px;
-  border-radius: 8px;
+  font-size: 13px;
+  padding: 3px 5px;
+  border-radius: 6px;
   border: 1px solid #cbd5f5;
-  min-width: 180px;
+  min-width: 130px;
 }
 
 .manager__group-controls {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 6px;
 }
 
 .manager__group-actions {
   display: flex;
-  gap: 8px;
+  gap: 4px;
   flex-wrap: wrap;
 }
 
 .manager__group-label {
-  font-size: 12px;
+  font-size: 10px;
   color: #64748b;
   text-transform: uppercase;
   letter-spacing: 0.08em;
@@ -250,9 +250,9 @@ body {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
-  border-radius: 12px;
+  gap: 6px;
+  padding: 3px 5px;
+  border-radius: 8px;
   background: #f8fafc;
   border: 1px solid #e2e8f0;
   position: relative;
@@ -275,20 +275,22 @@ body {
 .manager__tab-title {
   margin: 0;
   font-weight: 600;
-  font-size: 14px;
+  font-size: 11px;
 }
 
 .manager__tab-url {
   margin: 0;
-  font-size: 12px;
+  font-size: 9px;
+  line-height: 1.15;
   color: #64748b;
-  overflow-wrap: anywhere;
-  word-break: break-word;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .manager__tab-actions {
   display: flex;
-  gap: 8px;
+  gap: 3px;
   justify-self: end;
 }
 
@@ -320,13 +322,17 @@ body {
 }
 
 .drag-handle {
-  width: 28px;
-  height: 28px;
-  border-radius: 8px;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  line-height: 0;
+  border-radius: 5px;
   border: 1px solid #cbd5f5;
   background: #e2e8f0;
   display: inline-grid;
   place-items: center;
+  appearance: none;
+  -webkit-appearance: none;
   cursor: grab;
   flex-shrink: 0;
   justify-self: start;
@@ -335,12 +341,13 @@ body {
 
 .drag-handle::before {
   content: '';
-  width: 14px;
-  height: 10px;
+  display: block;
+  width: 10px;
+  height: 8px;
   background:
-    linear-gradient(#64748b 0 0) top/100% 2px,
-    linear-gradient(#64748b 0 0) center/100% 2px,
-    linear-gradient(#64748b 0 0) bottom/100% 2px;
+    linear-gradient(#64748b 0 0) top/100% 1px,
+    linear-gradient(#64748b 0 0) center/100% 1px,
+    linear-gradient(#64748b 0 0) bottom/100% 1px;
   background-repeat: no-repeat;
 }
 
@@ -362,15 +369,15 @@ body {
 }
 
 .manager__drag-overlay--label {
-  min-width: 180px;
-  max-width: 320px;
-  padding: 12px 16px;
-  border-radius: 14px;
+  min-width: 120px;
+  max-width: 220px;
+  padding: 6px 8px;
+  border-radius: 10px;
   background: #ffffff;
   border: 1px solid #cbd5f5;
   box-shadow: 0 18px 40px rgba(15, 23, 42, 0.18);
   color: #0f172a;
-  font-size: 14px;
+  font-size: 11px;
   font-weight: 600;
 }
 
@@ -396,49 +403,9 @@ body {
   color: #b91c1c;
 }
 
-.primary-button,
-.ghost-button {
-  border: none;
-  border-radius: 10px;
-  padding: 8px 14px;
-  font-size: 13px;
-  cursor: pointer;
-}
-
-.primary-button {
-  background: #0f172a;
-  color: #fff;
-}
-
-.primary-button:hover {
-  background: #1e293b;
-}
-
-.ghost-button {
-  background: #e2e8f0;
-  color: #0f172a;
-}
-
-.ghost-button:hover {
-  background: #cbd5f5;
-}
-
-.primary-button:disabled,
-.ghost-button:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-
-.primary-button:disabled:hover {
-  background: #0f172a;
-}
-
-.ghost-button:disabled:hover {
-  background: #e2e8f0;
-}
-
 .manager__lock-button {
-  min-width: 84px;
+  min-width: 0;
+  padding-inline: 4px;
 }
 
 .manager__lock-button--active {
@@ -452,4 +419,28 @@ body {
 
 .manager__options-link {
   text-decoration: none;
+}
+
+@media (max-width: 768px) {
+  #root {
+    padding: 6px;
+  }
+
+  .manager {
+    gap: 8px;
+  }
+
+  .manager__card {
+    padding: 8px;
+  }
+
+  .manager__group {
+    padding: 5px;
+  }
+
+  .manager__card-actions,
+  .manager__group-actions,
+  .manager__controls {
+    gap: 4px;
+  }
 }

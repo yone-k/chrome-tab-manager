@@ -15,143 +15,135 @@ body {
 }
 
 #root {
-  padding: 24px;
+  padding: 10px;
 }
 
 .options {
-  max-width: 720px;
+  max-width: 1200px;
   margin: 0 auto;
   display: grid;
-  gap: 24px;
+  gap: 10px;
 }
 
 .options__header {
   display: grid;
-  gap: 8px;
+  gap: 4px;
 }
 
 .options__badge {
   width: fit-content;
-  padding: 4px 10px;
+  padding: 2px 7px;
   border-radius: 999px;
   background: #1e40af;
   color: #fff;
-  font-size: 12px;
+  font-size: 10px;
   letter-spacing: 0.05em;
   text-transform: uppercase;
 }
 
 .options__title {
   margin: 0;
-  font-size: 26px;
+  font-size: 20px;
 }
 
 .options__subtitle {
   margin: 0;
   color: #475569;
-  font-size: 14px;
+  font-size: 11px;
 }
 
 .options__section {
   display: grid;
-  gap: 12px;
-  padding: 18px;
+  gap: 6px;
+  padding: 10px;
   background: #fff;
-  border-radius: 16px;
-  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.08);
+  border-radius: 10px;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.07);
 }
 
 .options__section-title {
   margin: 0;
-  font-size: 18px;
+  font-size: 15px;
 }
 
 .options__section-description {
   margin: 0;
   color: #475569;
-  font-size: 14px;
+  font-size: 11px;
 }
 
 .options__label {
   font-weight: 600;
-  font-size: 14px;
+  font-size: 11px;
 }
 
 .options__textarea {
   width: 100%;
   border: 1px solid #cbd5f5;
-  border-radius: 12px;
-  padding: 12px;
+  border-radius: 8px;
+  padding: 6px;
   font-family: 'Noto Sans JP', 'Segoe UI', system-ui, sans-serif;
-  font-size: 14px;
+  font-size: 11px;
+  line-height: 1.25;
   resize: vertical;
 }
 
 .options__toggles {
   display: grid;
-  gap: 8px;
+  gap: 4px;
 }
 
 .options__toggle {
   display: flex;
   align-items: center;
-  gap: 10px;
-  font-size: 14px;
+  gap: 6px;
+  font-size: 11px;
   color: #0f172a;
 }
 
 .options__toggle-input {
-  width: 16px;
-  height: 16px;
+  width: 13px;
+  height: 13px;
   accent-color: #1e40af;
 }
 
 .options__actions {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 6px;
   flex-wrap: wrap;
 }
 
 .options__footer {
   display: grid;
-  gap: 8px;
-}
-
-.primary-button,
-.ghost-button {
-  border: none;
-  border-radius: 10px;
-  padding: 10px 16px;
-  font-size: 14px;
-  cursor: pointer;
-}
-
-.primary-button {
-  background: #0f172a;
-  color: #fff;
-}
-
-.primary-button:hover {
-  background: #1e293b;
-}
-
-.ghost-button {
-  background: #e2e8f0;
-  color: #0f172a;
-}
-
-.ghost-button:hover {
-  background: #cbd5f5;
+  gap: 4px;
 }
 
 .options__status {
-  font-size: 12px;
+  font-size: 10px;
   color: #475569;
 }
 
 .options__error {
   margin: 0;
   color: #b91c1c;
-  font-size: 13px;
+  font-size: 11px;
+}
+
+@media (max-width: 768px) {
+  #root {
+    padding: 6px;
+  }
+
+  .options {
+    gap: 8px;
+  }
+
+  .options__section {
+    padding: 8px;
+  }
+
+  .options__actions {
+    gap: 4px;
+  }
 }

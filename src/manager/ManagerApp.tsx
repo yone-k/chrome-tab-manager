@@ -21,6 +21,7 @@ import {
   createHistoryId,
   normalizeManualHistorySetName,
 } from '../tab-manager/history';
+import { Button } from '../components/Button';
 import {
   buildGroupFilterOptions,
   filterHistorySets,
@@ -66,9 +67,9 @@ type ActiveDrop = {
   overId: string;
 };
 
-const SET_LIST_GAP_PX = 16;
-const BLOCK_LIST_GAP_PX = 16;
-const TAB_LIST_GAP_PX = 10;
+const SET_LIST_GAP_PX = 10;
+const BLOCK_LIST_GAP_PX = 10;
+const TAB_LIST_GAP_PX = 6;
 
 const collisionDetection: CollisionDetection = (args) => {
   const pointerCollisions = pointerWithin(args);
@@ -139,9 +140,9 @@ function OverlayTabRow({ tab }: { tab: TabSnapshot }) {
         <p className="manager__tab-url">{tab.url}</p>
       </div>
       <div className="manager__tab-actions">
-        <button className="ghost-button" type="button" disabled>
+        <Button variant="ghost" disabled>
           削除
-        </button>
+        </Button>
       </div>
     </div>
   );
@@ -155,9 +156,9 @@ function OverlayGroupSection({ group, tabs }: { group: GroupSnapshot; tabs: TabS
           <OverlayHandle compact />
           <h3 className="manager__group-title">{group.title}</h3>
         </div>
-        <button className="ghost-button" type="button" disabled>
+        <Button variant="ghost" disabled>
           グループを復元
-        </button>
+        </Button>
       </div>
       <div className="manager__tab-list">
         {tabs.map((tab) => (
@@ -192,12 +193,12 @@ function OverlaySetCard({ set }: { set: HistorySet }) {
           </div>
         </div>
         <div className="manager__card-actions">
-          <button className="primary-button" type="button" disabled>
+          <Button variant="primary" disabled>
             すべて復元
-          </button>
-          <button className="ghost-button" type="button" disabled>
+          </Button>
+          <Button variant="ghost" disabled>
             ウィンドウを削除
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -361,9 +362,9 @@ function TabRow({
         <p className="manager__tab-url">{tab.url}</p>
       </div>
       <div className="manager__tab-actions">
-        <button
-          className={`ghost-button manager__lock-button${locked ? ' manager__lock-button--active' : ''}`}
-          type="button"
+        <Button
+          variant="ghost"
+          className={`manager__lock-button${locked ? ' manager__lock-button--active' : ''}`}
           aria-label={locked ? 'タブのロックを解除する' : 'タブをロックする'}
           onClick={(event) => {
             event.stopPropagation();
@@ -372,15 +373,10 @@ function TabRow({
           disabled={lockToggleDisabled}
         >
           {locked ? 'ロック解除' : 'ロック'}
-        </button>
-        <button
-          className="ghost-button"
-          type="button"
-          onClick={rowActions.handleRemoveClick(tab)}
-          disabled={locked}
-        >
+        </Button>
+        <Button variant="ghost" onClick={rowActions.handleRemoveClick(tab)} disabled={locked}>
           削除
-        </button>
+        </Button>
       </div>
     </li>
   );
@@ -736,33 +732,21 @@ function GroupSection({
           )}
         </div>
         <div className="manager__group-actions">
-          <button
-            className={`ghost-button manager__lock-button${
-              groupLocked ? ' manager__lock-button--active' : ''
-            }`}
-            type="button"
+          <Button
+            variant="ghost"
+            className={`manager__lock-button${groupLocked ? ' manager__lock-button--active' : ''}`}
             aria-label={groupLocked ? 'グループのロックを解除する' : 'グループをロックする'}
             onClick={() => onToggleGroupLock(group.uid)}
             disabled={set.locked}
           >
             {groupLocked ? 'ロック解除' : 'ロック'}
-          </button>
-          <button
-            className="ghost-button"
-            type="button"
-            onClick={() => onRestoreGroup(group.id)}
-            disabled={!hasTabs}
-          >
+          </Button>
+          <Button variant="ghost" onClick={() => onRestoreGroup(group.id)} disabled={!hasTabs}>
             グループを復元
-          </button>
-          <button
-            className="ghost-button"
-            type="button"
-            onClick={() => onDeleteGroup(group.uid)}
-            disabled={groupLocked}
-          >
+          </Button>
+          <Button variant="ghost" onClick={() => onDeleteGroup(group.uid)} disabled={groupLocked}>
             グループを削除
-          </button>
+          </Button>
         </div>
       </div>
       <TabList
@@ -937,27 +921,20 @@ function SetCard({
           </div>
         </div>
         <div className="manager__card-actions">
-          <button
-            className={`ghost-button manager__lock-button${
-              set.locked ? ' manager__lock-button--active' : ''
-            }`}
-            type="button"
+          <Button
+            variant="ghost"
+            className={`manager__lock-button${set.locked ? ' manager__lock-button--active' : ''}`}
             aria-label={set.locked ? 'ウィンドウのロックを解除する' : 'ウィンドウをロックする'}
             onClick={onToggleSetLock}
           >
             {set.locked ? 'ロック解除' : 'ロック'}
-          </button>
-          <button className="primary-button" type="button" onClick={onRestoreSet}>
+          </Button>
+          <Button variant="primary" onClick={onRestoreSet}>
             すべて復元
-          </button>
-          <button
-            className="ghost-button"
-            type="button"
-            onClick={onDeleteSet}
-            disabled={set.locked}
-          >
+          </Button>
+          <Button variant="ghost" onClick={onDeleteSet} disabled={set.locked}>
             ウィンドウを削除
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -965,9 +942,9 @@ function SetCard({
         <>
           <div className="manager__group-controls">
             <span className="manager__group-label">グループ</span>
-            <button className="ghost-button" type="button" onClick={onCreateGroup}>
+            <Button variant="ghost" onClick={onCreateGroup}>
               新規グループ
-            </button>
+            </Button>
           </div>
           <BlockList
             entries={layoutEntries}
@@ -1911,7 +1888,7 @@ export function ManagerApp() {
           <div className="manager__header-top">
             <span className="manager__badge">タブマネージャー</span>
             <a
-              className="ghost-button manager__options-link"
+              className="button button--ghost button--compact manager__options-link"
               href={optionsUrl}
               target="_blank"
               rel="noreferrer"
@@ -1946,9 +1923,9 @@ export function ManagerApp() {
               </option>
             ))}
           </select>
-          <button className="ghost-button" type="button" onClick={handleCreateWindow}>
+          <Button variant="ghost" onClick={handleCreateWindow}>
             新規ウィンドウ
-          </button>
+          </Button>
           {actionMessage ? <span className="manager__status">{actionMessage}</span> : null}
         </section>
 
