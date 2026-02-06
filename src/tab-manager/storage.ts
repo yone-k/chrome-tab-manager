@@ -24,14 +24,22 @@ export function getDefaultState(): TabManagerState {
 export function wrapChromeStorage(storageArea: chrome.storage.StorageArea): StorageAreaLike {
   return {
     get: (keys) =>
-      new Promise((resolve) => {
+      new Promise((resolve, reject) => {
         storageArea.get(keys, (items: Record<string, unknown>) => {
+          if (chrome.runtime.lastError) {
+            reject(chrome.runtime.lastError);
+            return;
+          }
           resolve(items ?? {});
         });
       }),
     set: (items) =>
-      new Promise((resolve) => {
+      new Promise((resolve, reject) => {
         storageArea.set(items, () => {
+          if (chrome.runtime.lastError) {
+            reject(chrome.runtime.lastError);
+            return;
+          }
           resolve();
         });
       }),

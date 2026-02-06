@@ -26,12 +26,14 @@ function installChromeMock({
   createTab,
   getLastFocusedWindow,
   failCreateWithWindowId,
+  failCreateWithWindowIdMessage = 'No window with id',
 }: {
   queryTabs?: MockTab[];
   updateTab?: (tabId: number, updateProperties: chrome.tabs.UpdateProperties) => void;
   createTab?: (createProperties: chrome.tabs.CreateProperties) => void;
   getLastFocusedWindow?: MockWindow;
   failCreateWithWindowId?: number;
+  failCreateWithWindowIdMessage?: string;
 }) {
   let runtimeLastError: chrome.runtime.LastError | undefined;
   const query = vi.fn((_: chrome.tabs.QueryInfo, callback: (tabs: chrome.tabs.Tab[]) => void) => {
@@ -52,7 +54,7 @@ function installChromeMock({
         typeof failCreateWithWindowId === 'number' &&
         createProperties.windowId === failCreateWithWindowId
       ) {
-        runtimeLastError = { message: 'No window with id' };
+        runtimeLastError = { message: failCreateWithWindowIdMessage };
         callback({} as chrome.tabs.Tab);
         runtimeLastError = undefined;
         return;
@@ -182,6 +184,19 @@ describe('openManagerTabInCurrentWindow', () => {
       { url: managerUrl, active: true },
       expect.any(Function),
     );
+  });
+
+  it('No window with id 以外の作成エラーはそのまま送出する', async () => {
+    const { create } = installChromeMock({
+      queryTabs: [],
+      failCreateWithWindowId: 777,
+      failCreateWithWindowIdMessage: 'tabs.create failed',
+    });
+
+    await expect(openManagerTabInCurrentWindow(777)).rejects.toEqual({
+      message: 'tabs.create failed',
+    });
+    expect(create).toHaveBeenCalledTimes(1);
   });
 });
 

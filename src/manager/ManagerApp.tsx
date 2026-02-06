@@ -41,7 +41,7 @@ import {
 import { cleanupHistorySet } from './restoreCleanup';
 import { shouldSuppressRestoreLoading } from './restorePolicy';
 import { resolveRestoreTarget } from './restoreTarget';
-import { removeSetsEmptiedSince, removeSetsWithNoTabs } from './setCleanup';
+import { removeSetsEmptiedSince } from './setCleanup';
 import { createTabRowActions } from './tabRowActions';
 import type { DragItem, DropTarget } from './dragReorder';
 import { applyDragReorder } from './dragReorder';
@@ -1191,22 +1191,27 @@ async function restoreTabs(
   baseTabIndex: number,
 ) {
   const sortedTabs = [...tabs].sort((a, b) => a.index - b.index);
-  const createdTabs: Array<{ snapshot: TabSnapshot; tab: chrome.tabs.Tab }> = [];
-  const failedTabs: TabSnapshot[] = [];
   const shouldDiscard = shouldSuppressRestoreLoading({
     enabled: restoreLoadingSuppressionEnabled,
     tabCount: sortedTabs.length,
   });
-
-  for (const tab of sortedTabs) {
-    try {
-      const created = await createTab(windowId, tab.url, baseTabIndex + tab.index);
-      createdTabs.push({ snapshot: tab, tab: created });
-    } catch (err) {
-      console.error('Failed to create tab', err);
-      failedTabs.push(tab);
+  const creationResults = await Promise.allSettled(
+    sortedTabs.map((tab) => createTab(windowId, tab.url, baseTabIndex + tab.index)),
+  );
+  const createdTabs: Array<{ snapshot: TabSnapshot; tab: chrome.tabs.Tab }> = [];
+  const failedTabs: TabSnapshot[] = [];
+  creationResults.forEach((result, index) => {
+    const snapshot = sortedTabs[index];
+    if (!snapshot) {
+      return;
     }
-  }
+    if (result.status === 'fulfilled') {
+      createdTabs.push({ snapshot, tab: result.value });
+      return;
+    }
+    console.error('Failed to create tab', result.reason);
+    failedTabs.push(snapshot);
+  });
 
   const groupTabIds = new Map<number, number[]>();
   for (const { snapshot, tab } of createdTabs) {
@@ -1840,7 +1845,7 @@ export function ManagerApp() {
     }
   };
 
-  const handleRestoreTab = async (tab: TabSnapshot) => {
+  const handleRestoreTab = async (setId: string, tab: TabSnapshot) => {
     setActionMessage('タブを復元しています...');
     try {
       const windowId = await getCurrentWindowId();
@@ -1855,9 +1860,13 @@ export function ManagerApp() {
       if (removeRestoredTabsEnabled) {
         const updated = await updateState((current) => ({
           ...current,
-          historySets: removeSetsWithNoTabs(
-            current.historySets.map((item) => cleanupHistorySet(item, restoredTabs)),
-          ),
+          historySets: current.historySets.flatMap((item) => {
+            if (item.id !== setId) {
+              return [item];
+            }
+            const cleaned = cleanupHistorySet(item, restoredTabs);
+            return cleaned.tabs.length === 0 ? [] : [cleaned];
+          }),
         }));
         await refreshState(updated.historySets);
       }
@@ -1962,7 +1971,7 @@ export function ManagerApp() {
               {visibleSets.map((set, setIndex) => {
                 const fullSet = fullSets.find((item) => item.id === set.id);
                 const rowActions = createTabRowActions<TabSnapshot>({
-                  onOpen: handleRestoreTab,
+                  onOpen: (tab) => handleRestoreTab(set.id, tab),
                   onRemove: (tab) => handleDeleteTab(set.id, tab),
                 });
                 const handleToggleGroupLockForSet = (groupUid: string) => {

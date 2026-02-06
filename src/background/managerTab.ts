@@ -108,6 +108,17 @@ export async function ensureManagerTabInWindow(
   };
 }
 
+function isNoWindowError(error: unknown) {
+  if (error instanceof Error) {
+    return error.message.includes('No window with id');
+  }
+  if (typeof error !== 'object' || error === null || !('message' in error)) {
+    return false;
+  }
+  const message = error.message;
+  return typeof message === 'string' && message.includes('No window with id');
+}
+
 export async function openManagerTabInCurrentWindow(currentWindowId?: number) {
   const managerUrl = chrome.runtime.getURL('manager.html');
   const windowId = currentWindowId ?? (await getCurrentWindowId());
@@ -121,7 +132,10 @@ export async function openManagerTabInCurrentWindow(currentWindowId?: number) {
 
   try {
     await createManagerTab(managerUrl, { windowId, active: true });
-  } catch {
+  } catch (error) {
+    if (!isNoWindowError(error)) {
+      throw error;
+    }
     // The window may already be closed. Fall back to opening the manager tab in a new target.
     await createManagerTab(managerUrl, { active: true });
   }

@@ -164,4 +164,38 @@ describe('cleanupHistorySet', () => {
 
     expect(result.groups.map((group) => group.uid)).toEqual(['g-2']);
   });
+
+  it('同じURLとindexでもuidが異なるタブは誤って削除しない', () => {
+    const setWithDuplicateKey: HistorySet = {
+      ...sampleSet,
+      groups: [],
+      tabs: [
+        {
+          uid: 'dup-a',
+          title: 'A',
+          url: 'https://dup.example.com',
+          index: 0,
+          groupId: null,
+          locked: false,
+        },
+        {
+          uid: 'dup-b',
+          title: 'B',
+          url: 'https://dup.example.com',
+          index: 0,
+          groupId: null,
+          locked: false,
+        },
+      ],
+      layout: [],
+    };
+    setWithDuplicateKey.layout = buildLayoutFromData(
+      setWithDuplicateKey.groups,
+      setWithDuplicateKey.tabs,
+    );
+
+    const result = cleanupHistorySet(setWithDuplicateKey, [setWithDuplicateKey.tabs[0]!]);
+
+    expect(result.tabs.map((tab) => tab.uid)).toEqual(['dup-b']);
+  });
 });

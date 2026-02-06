@@ -5,7 +5,7 @@ import { isGroupEffectivelyLocked, isTabEffectivelyLocked } from './lockState';
 type TabKey = string;
 
 function buildTabKey(tab: TabSnapshot): TabKey {
-  return `${tab.url}::${tab.index}`;
+  return tab.uid;
 }
 
 type CleanupOptions = {

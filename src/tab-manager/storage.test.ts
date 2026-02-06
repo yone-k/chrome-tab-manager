@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { getDefaultState, getState, setState, updateState } from './storage';
+import { getDefaultState, getState, setState, updateState, wrapChromeStorage } from './storage';
 
 function createMemoryStorage(initial: Record<string, unknown> = {}) {
   let store = { ...initial };
@@ -21,6 +21,10 @@ function createMemoryStorage(initial: Record<string, unknown> = {}) {
 }
 
 describe('storage', () => {
+  beforeEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   it('保存がない場合はデフォルト状態を返す', async () => {
     const storage = createMemoryStorage();
     const state = await getState(storage);
@@ -244,5 +248,49 @@ describe('storage', () => {
     expect(set?.locked).toBe(false);
     expect(set?.groups[0]?.locked).toBe(false);
     expect(set?.tabs[0]?.locked).toBe(false);
+  });
+
+  it('wrapChromeStorage は get の lastError を reject する', async () => {
+    const runtimeLastError: chrome.runtime.LastError = { message: 'storage get failed' };
+
+    vi.stubGlobal('chrome', {
+      runtime: {
+        get lastError() {
+          return runtimeLastError;
+        },
+      },
+    } as unknown as typeof chrome);
+
+    const wrapped = wrapChromeStorage({
+      get: (
+        _keys: string[] | string | Record<string, unknown> | null,
+        callback: (items: Record<string, unknown>) => void,
+      ) => callback({}),
+      set: (_items: Record<string, unknown>, callback: () => void) => callback(),
+    } as unknown as chrome.storage.StorageArea);
+
+    await expect(wrapped.get(['tabManagerState'])).rejects.toEqual(runtimeLastError);
+  });
+
+  it('wrapChromeStorage は set の lastError を reject する', async () => {
+    const runtimeLastError: chrome.runtime.LastError = { message: 'storage set failed' };
+
+    vi.stubGlobal('chrome', {
+      runtime: {
+        get lastError() {
+          return runtimeLastError;
+        },
+      },
+    } as unknown as typeof chrome);
+
+    const wrapped = wrapChromeStorage({
+      get: (
+        _keys: string[] | string | Record<string, unknown> | null,
+        callback: (items: Record<string, unknown>) => void,
+      ) => callback({}),
+      set: (_items: Record<string, unknown>, callback: () => void) => callback(),
+    } as unknown as chrome.storage.StorageArea);
+
+    await expect(wrapped.set({ tabManagerState: {} })).rejects.toEqual(runtimeLastError);
   });
 });

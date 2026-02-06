@@ -13,6 +13,8 @@ import {
   openManagerTabInCurrentWindow,
 } from './managerTab';
 
+const MAX_HISTORY_SETS = 200;
+
 type WindowContext = {
   windowId: number;
   activeTab: chrome.tabs.Tab | null;
@@ -144,7 +146,7 @@ async function saveTabsAndClose(
 
   await updateState((state) => ({
     ...state,
-    historySets: [historySet, ...state.historySets],
+    historySets: [historySet, ...state.historySets].slice(0, MAX_HISTORY_SETS),
   }));
 
   const tabIds = savableTabs

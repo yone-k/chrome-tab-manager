@@ -30,10 +30,14 @@ function installChromeMock({
   tabs,
   groups,
   exclusions = [],
+  initialHistorySets = [],
+  failStorageSet = false,
 }: {
   tabs: MockTab[];
   groups: MockTabGroup[];
   exclusions?: string[];
+  initialHistorySets?: unknown[];
+  failStorageSet?: boolean;
 }) {
   const mutableTabs = tabs.map((tab) => ({ ...tab }));
   const mutableGroups = groups.map((group) => ({
@@ -45,10 +49,11 @@ function installChromeMock({
   const removedTabIds: number[] = [];
   const createdTabs: chrome.tabs.CreateProperties[] = [];
   const updatedTabs: Array<{ tabId: number; props: chrome.tabs.UpdateProperties }> = [];
+  let runtimeLastError: chrome.runtime.LastError | undefined;
   const storageData: Record<string, unknown> = {
     tabManagerState: {
       version: 1,
-      historySets: [],
+      historySets: initialHistorySets,
       exclusions,
       restoreLoadingSuppressionEnabled: true,
       removeRestoredTabsEnabled: true,
@@ -166,7 +171,7 @@ function installChromeMock({
     runtime: {
       getURL: vi.fn(() => managerUrl),
       get lastError() {
-        return undefined;
+        return runtimeLastError;
       },
     },
     tabs: {
@@ -191,6 +196,12 @@ function installChromeMock({
           callback(result);
         }),
         set: vi.fn((items: Record<string, unknown>, callback: () => void) => {
+          if (failStorageSet) {
+            runtimeLastError = { message: 'storage write failed' };
+            callback();
+            runtimeLastError = undefined;
+            return;
+          }
           Object.assign(storageData, items);
           callback();
         }),
@@ -407,5 +418,67 @@ describe('background commands', () => {
     expect(state.historySets[0]?.tabs.map((tab) => tab.url)).toEqual([
       'https://save.example.com/page',
     ]);
+  });
+
+  it('保存に失敗した場合はタブを閉じない', async () => {
+    const mock = installChromeMock({
+      tabs: [
+        {
+          id: 51,
+          windowId: 60,
+          index: 0,
+          active: true,
+          pinned: false,
+          url: 'https://save-fail.example.com',
+          title: 'save-fail',
+        },
+      ],
+      groups: [],
+      failStorageSet: true,
+    });
+
+    await expect(runSaveAndCloseCurrentWindow()).rejects.toEqual({
+      message: 'storage write failed',
+    });
+    expect(mock.removedTabIds).toEqual([]);
+  });
+
+  it('履歴セット数は上限を超えない', async () => {
+    const existingHistorySets = Array.from({ length: 200 }, (_, index) => ({
+      id: `old-${index}`,
+      name: `old-${index}`,
+      createdAt: index,
+      windowId: 1,
+      locked: false,
+      managerBinding: null,
+      tabs: [],
+      groups: [],
+      layout: [],
+    }));
+
+    const mock = installChromeMock({
+      tabs: [
+        {
+          id: 61,
+          windowId: 70,
+          index: 0,
+          active: true,
+          pinned: false,
+          url: 'https://cap.example.com',
+          title: 'cap',
+        },
+      ],
+      groups: [],
+      initialHistorySets: existingHistorySets,
+    });
+
+    await runSaveAndCloseCurrentWindow();
+
+    const state = mock.storageData.tabManagerState as {
+      historySets: Array<{ id: string; tabs: Array<{ url: string }> }>;
+    };
+    expect(state.historySets).toHaveLength(200);
+    expect(state.historySets[0]?.tabs.map((tab) => tab.url)).toEqual(['https://cap.example.com']);
+    expect(state.historySets.some((set) => set.id === 'old-199')).toBe(false);
   });
 });
