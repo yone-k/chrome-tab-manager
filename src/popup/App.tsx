@@ -8,6 +8,11 @@ import {
 } from '../tab-manager/history';
 import { getState, updateState } from '../tab-manager/storage';
 import type { GroupInput, TabInput } from '../tab-manager/history';
+import {
+  ensureManagerTabInWindow,
+  filterOutManagerTabs,
+  openManagerTabInCurrentWindow,
+} from './managerTab';
 import { getPopupTitle } from './title';
 import './popup.css';
 
@@ -47,54 +52,6 @@ async function closeTabs(tabIds: number[]) {
   });
 }
 
-async function openManagerTab() {
-  const managerUrl = chrome.runtime.getURL('manager.html');
-  const existing = await new Promise<chrome.tabs.Tab[]>((resolve, reject) => {
-    chrome.tabs.query({ url: managerUrl }, (tabs: chrome.tabs.Tab[]) => {
-      if (chrome.runtime.lastError) {
-        reject(chrome.runtime.lastError);
-        return;
-      }
-      resolve(tabs);
-    });
-  });
-
-  if (existing.length > 0 && existing[0].id !== undefined) {
-    const target = existing[0];
-    await new Promise<void>((resolve, reject) => {
-      chrome.tabs.update(target.id!, { active: true }, () => {
-        if (chrome.runtime.lastError) {
-          reject(chrome.runtime.lastError);
-          return;
-        }
-        resolve();
-      });
-    });
-    if (target.windowId !== undefined) {
-      await new Promise<void>((resolve, reject) => {
-        chrome.windows.update(target.windowId, { focused: true }, () => {
-          if (chrome.runtime.lastError) {
-            reject(chrome.runtime.lastError);
-            return;
-          }
-          resolve();
-        });
-      });
-    }
-    return;
-  }
-
-  await new Promise<void>((resolve, reject) => {
-    chrome.tabs.create({ url: managerUrl }, () => {
-      if (chrome.runtime.lastError) {
-        reject(chrome.runtime.lastError);
-        return;
-      }
-      resolve();
-    });
-  });
-}
-
 export function App() {
   const [status, setStatus] = useState<string | null>(null);
   const [isWorking, setIsWorking] = useState(false);
@@ -102,7 +59,7 @@ export function App() {
   const handleOpenManager = async () => {
     setStatus(null);
     try {
-      await openManagerTab();
+      await openManagerTabInCurrentWindow();
     } catch (err) {
       setStatus(err instanceof Error ? err.message : 'タブマネージャーを開けませんでした。');
     }
@@ -124,10 +81,11 @@ export function App() {
         return;
       }
       const exclusions = stored.exclusions;
-      const savableTabs = filterSavableTabs(tabs, exclusions);
+      const managerUrl = chrome.runtime.getURL('manager.html');
+      const savableTabs = filterOutManagerTabs(filterSavableTabs(tabs, exclusions), managerUrl);
       if (savableTabs.length === 0) {
         setStatus('保存できるタブがありません。すべてピン留めか除外対象です。');
-        await openManagerTab();
+        await openManagerTabInCurrentWindow(windowId);
         return;
       }
       const groups = await queryTabGroups(windowId);
@@ -155,14 +113,20 @@ export function App() {
       const tabIds = savableTabs
         .map((tab) => tab.id)
         .filter((id): id is number => typeof id === 'number');
+      const activeTab = tabs.find((tab) => tab.active);
       await updateState((state) => ({
         ...state,
         historySets: [historySet, ...state.historySets],
       }));
+      await ensureManagerTabInWindow(
+        windowId,
+        typeof activeTab?.index === 'number' ? activeTab.index + 1 : undefined,
+      );
       if (tabIds.length > 0) {
         await closeTabs(tabIds);
+      } else {
+        await openManagerTabInCurrentWindow(windowId);
       }
-      await openManagerTab();
       setStatus(`${savableTabs.length} 件のタブを保存しました。`);
     } catch (err) {
       setStatus(err instanceof Error ? err.message : 'タブの保存に失敗しました。');
