@@ -922,6 +922,18 @@ async function createRestoreWindow() {
   });
 }
 
+async function getWindowTabCount(windowId: number) {
+  return new Promise<number>((resolve, reject) => {
+    chrome.tabs.query({ windowId }, (tabs: chrome.tabs.Tab[]) => {
+      if (chrome.runtime.lastError) {
+        reject(chrome.runtime.lastError);
+        return;
+      }
+      resolve(tabs.length);
+    });
+  });
+}
+
 async function removeTab(tabId: number) {
   return new Promise<void>((resolve, reject) => {
     chrome.tabs.remove(tabId, () => {
@@ -934,9 +946,9 @@ async function removeTab(tabId: number) {
   });
 }
 
-async function createTab(windowId: number, url: string) {
+async function createTab(windowId: number, url: string, index: number) {
   return new Promise<chrome.tabs.Tab>((resolve, reject) => {
-    chrome.tabs.create({ windowId, url, active: false }, (tab: chrome.tabs.Tab) => {
+    chrome.tabs.create({ windowId, url, active: false, index }, (tab: chrome.tabs.Tab) => {
       if (chrome.runtime.lastError) {
         reject(chrome.runtime.lastError);
         return;
@@ -1051,6 +1063,7 @@ async function restoreTabs(
   groups: GroupSnapshot[],
   windowId: number,
   restoreLoadingSuppressionEnabled: boolean,
+  baseTabIndex: number,
 ) {
   const sortedTabs = [...tabs].sort((a, b) => a.index - b.index);
   const createdTabs: Array<{ snapshot: TabSnapshot; tab: chrome.tabs.Tab }> = [];
@@ -1062,7 +1075,7 @@ async function restoreTabs(
 
   for (const tab of sortedTabs) {
     try {
-      const created = await createTab(windowId, tab.url);
+      const created = await createTab(windowId, tab.url, baseTabIndex + tab.index);
       createdTabs.push({ snapshot: tab, tab: created });
     } catch (err) {
       console.error('Failed to create tab', err);
@@ -1099,7 +1112,7 @@ async function restoreTabs(
       console.error('Failed to update tab group', err);
     }
     try {
-      await moveTabGroup(newGroupId, group.index);
+      await moveTabGroup(newGroupId, baseTabIndex + group.index);
     } catch (err) {
       console.error('Failed to move tab group', err);
     }
@@ -1542,11 +1555,13 @@ export function ManagerApp() {
       );
       const restoreWindow = restoreTarget === 'new-window' ? await createRestoreWindow() : null;
       const windowId = restoreWindow?.windowId ?? currentManager.windowId;
+      const baseTabIndex = await getWindowTabCount(windowId);
       const { restoredTabs, failedTabs } = await restoreTabs(
         targetSet.tabs,
         targetSet.groups,
         windowId,
         restoreLoadingSuppressionEnabled,
+        baseTabIndex,
       );
       const initialTabId = restoreWindow?.initialTabId ?? null;
       if (restoreWindow) {
@@ -1595,6 +1610,7 @@ export function ManagerApp() {
     setActionMessage('グループを復元しています...');
     try {
       const windowId = await getCurrentWindowId();
+      const baseTabIndex = await getWindowTabCount(windowId);
       const tabs = targetSet.tabs.filter((tab) => tab.groupId === groupId);
       if (tabs.length === 0) {
         setActionMessage('復元できるタブがありません。');
@@ -1605,6 +1621,7 @@ export function ManagerApp() {
         [group],
         windowId,
         restoreLoadingSuppressionEnabled,
+        baseTabIndex,
       );
       if (removeRestoredTabsEnabled) {
         const updated = await updateState((current) => ({
@@ -1630,11 +1647,13 @@ export function ManagerApp() {
     setActionMessage('タブを復元しています...');
     try {
       const windowId = await getCurrentWindowId();
+      const baseTabIndex = await getWindowTabCount(windowId);
       const { restoredTabs } = await restoreTabs(
         [tab],
         [],
         windowId,
         restoreLoadingSuppressionEnabled,
+        baseTabIndex,
       );
       if (removeRestoredTabsEnabled) {
         const updated = await updateState((current) => ({
