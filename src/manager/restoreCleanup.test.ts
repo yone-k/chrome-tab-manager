@@ -59,4 +59,26 @@ describe('cleanupHistorySet', () => {
     expect(result.tabs).toEqual([]);
     expect(result.groups).toEqual(sampleSet.groups);
   });
+
+  it('pruneEmptyGroups=true の場合は空グループを削除する', () => {
+    const restored: TabSnapshot[] = [
+      { uid: 't-1', title: 'Docs', url: 'https://docs.example.com', index: 0, groupId: 1 },
+      { uid: 't-4', title: 'Blog', url: 'https://blog.example.com', index: 3, groupId: 2 },
+    ];
+
+    const result = cleanupHistorySet(sampleSet, restored, { pruneEmptyGroups: true });
+
+    expect(result.groups.map((group) => group.id)).toEqual([1]);
+    expect(result.layout.map((item) => `${item.type}:${item.uid}`)).toEqual([
+      'group:g-1',
+      'tab:t-3',
+    ]);
+  });
+
+  it('pruneEmptyGroups=true かつ全タブ復元時は空グループをすべて削除する', () => {
+    const result = cleanupHistorySet(sampleSet, sampleSet.tabs, { pruneEmptyGroups: true });
+
+    expect(result.tabs).toEqual([]);
+    expect(result.groups).toEqual([]);
+  });
 });

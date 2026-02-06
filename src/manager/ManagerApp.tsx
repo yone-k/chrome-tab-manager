@@ -1054,14 +1054,20 @@ async function restoreTabs(
 ) {
   const sortedTabs = [...tabs].sort((a, b) => a.index - b.index);
   const createdTabs: Array<{ snapshot: TabSnapshot; tab: chrome.tabs.Tab }> = [];
+  const failedTabs: TabSnapshot[] = [];
   const shouldDiscard = shouldSuppressRestoreLoading({
     enabled: restoreLoadingSuppressionEnabled,
     tabCount: sortedTabs.length,
   });
 
   for (const tab of sortedTabs) {
-    const created = await createTab(windowId, tab.url);
-    createdTabs.push({ snapshot: tab, tab: created });
+    try {
+      const created = await createTab(windowId, tab.url);
+      createdTabs.push({ snapshot: tab, tab: created });
+    } catch (err) {
+      console.error('Failed to create tab', err);
+      failedTabs.push(tab);
+    }
   }
 
   const groupTabIds = new Map<number, number[]>();
@@ -1100,10 +1106,10 @@ async function restoreTabs(
   }
 
   if (shouldDiscard) {
-    const results = await Promise.all(
+    const restoredTabs = await Promise.all(
       createdTabs.map(async ({ snapshot, tab }) => {
         if (tab.id === undefined) {
-          return { snapshot, restored: false };
+          return snapshot;
         }
         const matched = await waitForTabUrl(tab.id, snapshot.url);
         if (!matched) {
@@ -1111,22 +1117,16 @@ async function restoreTabs(
             tabId: tab.id,
             expectedUrl: snapshot.url,
           });
-          return { snapshot, restored: false };
+          return snapshot;
         }
         await discardTab(tab.id);
-        return { snapshot, restored: true };
+        return snapshot;
       }),
     );
-    const restoredTabs = results
-      .filter((result) => result.restored)
-      .map((result) => result.snapshot);
-    const failedTabs = results
-      .filter((result) => !result.restored)
-      .map((result) => result.snapshot);
     return { restoredTabs, failedTabs };
   }
 
-  return { restoredTabs: sortedTabs, failedTabs: [] };
+  return { restoredTabs: createdTabs.map((item) => item.snapshot), failedTabs };
 }
 
 export function ManagerApp() {
@@ -1549,19 +1549,25 @@ export function ManagerApp() {
         restoreLoadingSuppressionEnabled,
       );
       const initialTabId = restoreWindow?.initialTabId ?? null;
-      if (initialTabId !== null && restoredTabs.length > 0) {
-        try {
-          await removeTab(initialTabId);
-        } catch (err) {
-          console.error('Failed to remove initial tab in restore window', err);
+      if (restoreWindow) {
+        if (initialTabId !== null) {
+          try {
+            await removeTab(initialTabId);
+          } catch (err) {
+            console.error('Failed to remove initial tab in restore window', err);
+          }
         }
       }
       if (removeRestoredTabsEnabled) {
         const updated = await updateState((current) => ({
           ...current,
-          historySets: current.historySets.map((item) =>
-            item.id === targetSet.id ? cleanupHistorySet(item, restoredTabs) : item,
-          ),
+          historySets: current.historySets.flatMap((item) => {
+            if (item.id !== targetSet.id) {
+              return [item];
+            }
+            const cleaned = cleanupHistorySet(item, restoredTabs, { pruneEmptyGroups: true });
+            return cleaned.tabs.length === 0 ? [] : [cleaned];
+          }),
         }));
         await refreshState(updated.historySets);
       }
