@@ -52,13 +52,24 @@ body {
   font-size: 14px;
 }
 
-.options__panel {
+.options__section {
   display: grid;
   gap: 12px;
   padding: 18px;
   background: #fff;
   border-radius: 16px;
   box-shadow: 0 12px 30px rgba(15, 23, 42, 0.08);
+}
+
+.options__section-title {
+  margin: 0;
+  font-size: 18px;
+}
+
+.options__section-description {
+  margin: 0;
+  color: #475569;
+  font-size: 14px;
 }
 
 .options__label {
@@ -100,6 +111,11 @@ body {
   align-items: center;
   gap: 12px;
   flex-wrap: wrap;
+}
+
+.options__footer {
+  display: grid;
+  gap: 8px;
 }
 
 .primary-button,

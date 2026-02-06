@@ -80,25 +80,18 @@ export function OptionsApp() {
     <div className="options">
       <header className="options__header">
         <span className="options__badge">タブマネージャー</span>
-        <h1 className="options__title">除外ルール</h1>
-        <p className="options__subtitle">
-          1行に1パターンずつ追加してください。<code>chrome://</code> のようなプレフィックスや{' '}
-          <code>example.com</code> のようなドメインに対応しています。
-        </p>
+        <h1 className="options__title">タブマネージャー設定</h1>
+        <p className="options__subtitle">復元設定と除外ルールを管理できます。</p>
       </header>
 
-      <section className="options__panel">
-        <label className="options__label" htmlFor="exclusions">
-          除外するURLプレフィックス / ドメイン
-        </label>
-        <textarea
-          id="exclusions"
-          className="options__textarea"
-          value={exclusionsText}
-          onChange={(event) => setExclusionsText(event.target.value)}
-          rows={10}
-          spellCheck={false}
-        />
+      <section
+        className="options__section options__section--restore"
+        aria-labelledby="restore-settings"
+      >
+        <h2 id="restore-settings" className="options__section-title">
+          復元設定
+        </h2>
+        <p className="options__section-description">タブ復元時の動作を設定します。</p>
         <div className="options__toggles">
           <label className="options__toggle">
             <input
@@ -119,6 +112,33 @@ export function OptionsApp() {
             <span className="options__toggle-label">復元したタブを履歴から削除する</span>
           </label>
         </div>
+      </section>
+
+      <section
+        className="options__section options__section--exclusions"
+        aria-labelledby="exclusion-rules"
+      >
+        <h2 id="exclusion-rules" className="options__section-title">
+          除外ルール
+        </h2>
+        <p className="options__section-description">
+          1行に1パターンずつ追加してください。<code>chrome://</code> のようなプレフィックスや{' '}
+          <code>example.com</code> のようなドメインに対応しています。
+        </p>
+        <label className="options__label" htmlFor="exclusions">
+          除外するURLプレフィックス / ドメイン
+        </label>
+        <textarea
+          id="exclusions"
+          className="options__textarea"
+          value={exclusionsText}
+          onChange={(event) => setExclusionsText(event.target.value)}
+          rows={10}
+          spellCheck={false}
+        />
+      </section>
+
+      <div className="options__footer">
         <div className="options__actions">
           <button className="primary-button" type="button" onClick={handleSave}>
             保存
@@ -133,7 +153,7 @@ export function OptionsApp() {
           </span>
         </div>
         {error ? <p className="options__error">{error}</p> : null}
-      </section>
+      </div>
     </div>
   );
 }
