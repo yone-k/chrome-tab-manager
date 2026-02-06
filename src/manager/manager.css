@@ -423,6 +423,33 @@ body {
   background: #cbd5f5;
 }
 
+.primary-button:disabled,
+.ghost-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.primary-button:disabled:hover {
+  background: #0f172a;
+}
+
+.ghost-button:disabled:hover {
+  background: #e2e8f0;
+}
+
+.manager__lock-button {
+  min-width: 84px;
+}
+
+.manager__lock-button--active {
+  background: #c7d2fe;
+  color: #312e81;
+}
+
+.manager__lock-button--active:hover {
+  background: #a5b4fc;
+}
+
 .manager__options-link {
   text-decoration: none;
 }

@@ -1,5 +1,6 @@
 import type { HistorySet, TabSnapshot } from '../tab-manager/types';
 import { normalizeLayout } from '../tab-manager/layout';
+import { isGroupEffectivelyLocked, isTabEffectivelyLocked } from './lockState';
 
 type TabKey = string;
 
@@ -17,7 +18,9 @@ export function cleanupHistorySet(
   options: CleanupOptions = {},
 ) {
   const restoredKeys = new Set(restoredTabs.map(buildTabKey));
-  const remainingTabs = set.tabs.filter((tab) => !restoredKeys.has(buildTabKey(tab)));
+  const remainingTabs = set.tabs.filter(
+    (tab) => !restoredKeys.has(buildTabKey(tab)) || isTabEffectivelyLocked(set, tab),
+  );
   const shouldPruneEmptyGroups = options.pruneEmptyGroups ?? false;
   const remainingGroupIds = new Set(
     remainingTabs
@@ -25,7 +28,9 @@ export function cleanupHistorySet(
       .filter((groupId): groupId is number => groupId !== null),
   );
   const remainingGroups = shouldPruneEmptyGroups
-    ? set.groups.filter((group) => remainingGroupIds.has(group.id))
+    ? set.groups.filter(
+        (group) => remainingGroupIds.has(group.id) || isGroupEffectivelyLocked(set, group.uid),
+      )
     : set.groups;
 
   return {

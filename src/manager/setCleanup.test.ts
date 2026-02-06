@@ -9,6 +9,7 @@ function createSet(id: string, tabCount: number): HistorySet {
     name: id,
     createdAt: 1,
     windowId: 1,
+    locked: false,
     managerBinding: null,
     groups: [],
     tabs: Array.from({ length: tabCount }, (_, index) => ({
@@ -17,6 +18,7 @@ function createSet(id: string, tabCount: number): HistorySet {
       url: `https://example.com/${id}/${index}`,
       index,
       groupId: null,
+      locked: false,
     })),
     layout: [],
   };

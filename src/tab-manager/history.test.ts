@@ -34,8 +34,11 @@ describe('buildHistorySet', () => {
       name: 'window-1',
       createdAt: 1700000000000,
       windowId: 5,
+      locked: false,
       managerBinding: { managerTabId: 10, managerWindowId: 5 },
     });
+    expect(result.groups.every((group) => group.locked === false)).toBe(true);
+    expect(result.tabs.every((tab) => tab.locked === false)).toBe(true);
   });
 
   it('名前が空文字の場合は既定名へフォールバックする', () => {

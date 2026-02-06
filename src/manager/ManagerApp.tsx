@@ -32,6 +32,12 @@ import { getState, STATE_KEY, updateState } from '../tab-manager/storage';
 import type { GroupSnapshot, HistorySet, TabSnapshot } from '../tab-manager/types';
 import { createUid } from '../tab-manager/uid';
 import { deleteGroupFromHistorySet } from './groupState';
+import {
+  applyGroupLock,
+  applySetLock,
+  isGroupEffectivelyLocked,
+  isTabEffectivelyLocked,
+} from './lockState';
 import { cleanupHistorySet } from './restoreCleanup';
 import { shouldSuppressRestoreLoading } from './restorePolicy';
 import { resolveRestoreTarget } from './restoreTarget';
@@ -301,9 +307,20 @@ type TabRowProps = {
   setId: string;
   reorderEnabled: boolean;
   rowActions: TabRowActions;
+  locked: boolean;
+  onToggleLock: (tab: TabSnapshot) => void;
+  lockToggleDisabled: boolean;
 };
 
-function TabRow({ tab, setId, reorderEnabled, rowActions }: TabRowProps) {
+function TabRow({
+  tab,
+  setId,
+  reorderEnabled,
+  rowActions,
+  locked,
+  onToggleLock,
+  lockToggleDisabled,
+}: TabRowProps) {
   const {
     setNodeRef: setDragRef,
     attributes,
@@ -344,7 +361,24 @@ function TabRow({ tab, setId, reorderEnabled, rowActions }: TabRowProps) {
         <p className="manager__tab-url">{tab.url}</p>
       </div>
       <div className="manager__tab-actions">
-        <button className="ghost-button" type="button" onClick={rowActions.handleRemoveClick(tab)}>
+        <button
+          className={`ghost-button manager__lock-button${locked ? ' manager__lock-button--active' : ''}`}
+          type="button"
+          aria-label={locked ? 'タブのロックを解除する' : 'タブをロックする'}
+          onClick={(event) => {
+            event.stopPropagation();
+            onToggleLock(tab);
+          }}
+          disabled={lockToggleDisabled}
+        >
+          {locked ? 'ロック解除' : 'ロック'}
+        </button>
+        <button
+          className="ghost-button"
+          type="button"
+          onClick={rowActions.handleRemoveClick(tab)}
+          disabled={locked}
+        >
           削除
         </button>
       </div>
@@ -356,8 +390,10 @@ type TabListProps = {
   tabs: TabSnapshot[];
   setId: string;
   groupUid: string;
+  set: HistorySet;
   reorderEnabled: boolean;
   rowActions: TabRowActions;
+  onToggleTabLock: (tab: TabSnapshot) => void;
   activeDrop: ActiveDrop | null;
   dropGapPx: number;
 };
@@ -366,8 +402,10 @@ function TabList({
   tabs,
   setId,
   groupUid,
+  set,
   reorderEnabled,
   rowActions,
+  onToggleTabLock,
   activeDrop,
   dropGapPx,
 }: TabListProps) {
@@ -381,19 +419,33 @@ function TabList({
         baseGapPx={TAB_LIST_GAP_PX}
         reorderEnabled={reorderEnabled}
       />
-      {tabs.map((tab, index) => (
-        <Fragment key={tab.uid}>
-          <TabRow tab={tab} setId={setId} reorderEnabled={reorderEnabled} rowActions={rowActions} />
-          <DropZone
-            id={`zone:tab:${setId}:${groupUid}:${index + 1}`}
-            dropItem={{ type: 'tab-zone', setId, groupUid, index: index + 1 }}
-            activeDrop={activeDrop}
-            dropGapPx={dropGapPx}
-            baseGapPx={TAB_LIST_GAP_PX}
-            reorderEnabled={reorderEnabled}
-          />
-        </Fragment>
-      ))}
+      {tabs.map((tab, index) => {
+        const parentGroup =
+          tab.groupId === null ? null : set.groups.find((g) => g.id === tab.groupId);
+        const parentLocked =
+          set.locked || (parentGroup ? isGroupEffectivelyLocked(set, parentGroup.uid) : false);
+        return (
+          <Fragment key={tab.uid}>
+            <TabRow
+              tab={tab}
+              setId={setId}
+              reorderEnabled={reorderEnabled}
+              rowActions={rowActions}
+              locked={isTabEffectivelyLocked(set, tab)}
+              onToggleLock={onToggleTabLock}
+              lockToggleDisabled={parentLocked}
+            />
+            <DropZone
+              id={`zone:tab:${setId}:${groupUid}:${index + 1}`}
+              dropItem={{ type: 'tab-zone', setId, groupUid, index: index + 1 }}
+              activeDrop={activeDrop}
+              dropGapPx={dropGapPx}
+              baseGapPx={TAB_LIST_GAP_PX}
+              reorderEnabled={reorderEnabled}
+            />
+          </Fragment>
+        );
+      })}
     </ul>
   );
 }
@@ -447,11 +499,14 @@ function buildLayoutEntries(set: HistorySet): LayoutEntry[] {
 
 type BlockListProps = {
   entries: LayoutEntry[];
+  set: HistorySet;
   setId: string;
   reorderEnabled: boolean;
   onRestoreGroup: (groupId: number) => void;
   onRenameGroup: (groupUid: string, title: string) => void;
   onDeleteGroup: (groupUid: string) => void;
+  onToggleGroupLock: (groupUid: string) => void;
+  onToggleTabLock: (tab: TabSnapshot) => void;
   rowActions: TabRowActions;
   activeDrop: ActiveDrop | null;
   dropGapPx: number;
@@ -459,29 +514,44 @@ type BlockListProps = {
 
 function UngroupedTabBlock({
   tab,
+  set,
   setId,
   reorderEnabled,
   rowActions,
+  onToggleTabLock,
 }: {
   tab: TabSnapshot;
+  set: HistorySet;
   setId: string;
   reorderEnabled: boolean;
   rowActions: TabRowActions;
+  onToggleTabLock: (tab: TabSnapshot) => void;
 }) {
   return (
     <ul className="manager__tab-list manager__tab-list--block">
-      <TabRow tab={tab} setId={setId} reorderEnabled={reorderEnabled} rowActions={rowActions} />
+      <TabRow
+        tab={tab}
+        setId={setId}
+        reorderEnabled={reorderEnabled}
+        rowActions={rowActions}
+        locked={isTabEffectivelyLocked(set, tab)}
+        onToggleLock={onToggleTabLock}
+        lockToggleDisabled={set.locked}
+      />
     </ul>
   );
 }
 
 function BlockList({
   entries,
+  set,
   setId,
   reorderEnabled,
   onRestoreGroup,
   onRenameGroup,
   onDeleteGroup,
+  onToggleGroupLock,
+  onToggleTabLock,
   rowActions,
   activeDrop,
   dropGapPx,
@@ -500,6 +570,7 @@ function BlockList({
         <Fragment key={entry.type === 'group' ? entry.group.uid : entry.tab.uid}>
           {entry.type === 'group' ? (
             <GroupSection
+              set={set}
               setId={setId}
               group={entry.group}
               tabs={entry.tabs}
@@ -507,6 +578,8 @@ function BlockList({
               onRestoreGroup={onRestoreGroup}
               onRenameGroup={onRenameGroup}
               onDeleteGroup={onDeleteGroup}
+              onToggleGroupLock={onToggleGroupLock}
+              onToggleTabLock={onToggleTabLock}
               rowActions={rowActions}
               activeDrop={activeDrop}
               dropGapPx={dropGapPx}
@@ -514,9 +587,11 @@ function BlockList({
           ) : (
             <UngroupedTabBlock
               tab={entry.tab}
+              set={set}
               setId={setId}
               reorderEnabled={reorderEnabled}
               rowActions={rowActions}
+              onToggleTabLock={onToggleTabLock}
             />
           )}
           <DropZone
@@ -534,6 +609,7 @@ function BlockList({
 }
 
 type GroupSectionProps = {
+  set: HistorySet;
   setId: string;
   group: GroupSnapshot;
   tabs: TabSnapshot[];
@@ -541,12 +617,15 @@ type GroupSectionProps = {
   onRestoreGroup: (groupId: number) => void;
   onRenameGroup: (groupUid: string, title: string) => void;
   onDeleteGroup: (groupUid: string) => void;
+  onToggleGroupLock: (groupUid: string) => void;
+  onToggleTabLock: (tab: TabSnapshot) => void;
   rowActions: TabRowActions;
   activeDrop: ActiveDrop | null;
   dropGapPx: number;
 };
 
 function GroupSection({
+  set,
   setId,
   group,
   tabs,
@@ -554,6 +633,8 @@ function GroupSection({
   onRestoreGroup,
   onRenameGroup,
   onDeleteGroup,
+  onToggleGroupLock,
+  onToggleTabLock,
   rowActions,
   activeDrop,
   dropGapPx,
@@ -562,6 +643,7 @@ function GroupSection({
   const [draftTitle, setDraftTitle] = useState(group.title);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const hasTabs = tabs.length > 0;
+  const groupLocked = isGroupEffectivelyLocked(set, group.uid);
   const {
     setNodeRef: setDragRef,
     attributes,
@@ -655,6 +737,17 @@ function GroupSection({
         </div>
         <div className="manager__group-actions">
           <button
+            className={`ghost-button manager__lock-button${
+              groupLocked ? ' manager__lock-button--active' : ''
+            }`}
+            type="button"
+            aria-label={groupLocked ? 'グループのロックを解除する' : 'グループをロックする'}
+            onClick={() => onToggleGroupLock(group.uid)}
+            disabled={set.locked}
+          >
+            {groupLocked ? 'ロック解除' : 'ロック'}
+          </button>
+          <button
             className="ghost-button"
             type="button"
             onClick={() => onRestoreGroup(group.id)}
@@ -662,7 +755,12 @@ function GroupSection({
           >
             グループを復元
           </button>
-          <button className="ghost-button" type="button" onClick={() => onDeleteGroup(group.uid)}>
+          <button
+            className="ghost-button"
+            type="button"
+            onClick={() => onDeleteGroup(group.uid)}
+            disabled={groupLocked}
+          >
             グループを削除
           </button>
         </div>
@@ -671,8 +769,10 @@ function GroupSection({
         tabs={tabs}
         setId={setId}
         groupUid={group.uid}
+        set={set}
         reorderEnabled={reorderEnabled}
         rowActions={rowActions}
+        onToggleTabLock={onToggleTabLock}
         activeDrop={activeDrop}
         dropGapPx={dropGapPx}
       />
@@ -688,11 +788,14 @@ type SetCardProps = {
   onStartEditingHandled: () => void;
   onRestoreSet: () => void;
   onDeleteSet: () => void;
+  onToggleSetLock: () => void;
   onRenameSet: (title: string) => void;
   onRestoreGroup: (groupId: number) => void;
   onRenameGroup: (groupUid: string, title: string) => void;
   onDeleteGroup: (groupUid: string) => void;
+  onToggleGroupLock: (groupUid: string) => void;
   onCreateGroup: () => void;
+  onToggleTabLock: (tab: TabSnapshot) => void;
   rowActions: TabRowActions;
   activeDrop: ActiveDrop | null;
   dropGapPx: number;
@@ -706,11 +809,14 @@ function SetCard({
   onStartEditingHandled,
   onRestoreSet,
   onDeleteSet,
+  onToggleSetLock,
   onRenameSet,
   onRestoreGroup,
   onRenameGroup,
   onDeleteGroup,
+  onToggleGroupLock,
   onCreateGroup,
+  onToggleTabLock,
   rowActions,
   activeDrop,
   dropGapPx,
@@ -831,10 +937,25 @@ function SetCard({
           </div>
         </div>
         <div className="manager__card-actions">
+          <button
+            className={`ghost-button manager__lock-button${
+              set.locked ? ' manager__lock-button--active' : ''
+            }`}
+            type="button"
+            aria-label={set.locked ? 'ウィンドウのロックを解除する' : 'ウィンドウをロックする'}
+            onClick={onToggleSetLock}
+          >
+            {set.locked ? 'ロック解除' : 'ロック'}
+          </button>
           <button className="primary-button" type="button" onClick={onRestoreSet}>
             すべて復元
           </button>
-          <button className="ghost-button" type="button" onClick={onDeleteSet}>
+          <button
+            className="ghost-button"
+            type="button"
+            onClick={onDeleteSet}
+            disabled={set.locked}
+          >
             ウィンドウを削除
           </button>
         </div>
@@ -850,11 +971,14 @@ function SetCard({
           </div>
           <BlockList
             entries={layoutEntries}
+            set={set}
             setId={set.id}
             reorderEnabled={reorderEnabled}
             onRestoreGroup={onRestoreGroup}
             onRenameGroup={onRenameGroup}
             onDeleteGroup={onDeleteGroup}
+            onToggleGroupLock={onToggleGroupLock}
+            onToggleTabLock={onToggleTabLock}
             rowActions={rowActions}
             activeDrop={activeDrop}
             dropGapPx={dropGapPx}
@@ -1438,6 +1562,7 @@ export function ManagerApp() {
       name: DEFAULT_NEW_WINDOW_NAME,
       createdAt,
       windowId: 0,
+      locked: false,
       managerBinding: null,
       tabs: [],
       groups: [],
@@ -1452,6 +1577,11 @@ export function ManagerApp() {
   };
 
   const handleDeleteSet = async (setId: string) => {
+    const targetSet = fullSets.find((set) => set.id === setId);
+    if (targetSet?.locked) {
+      setActionMessage('ロック中のウィンドウは削除できません。');
+      return;
+    }
     const updated = await updateState((current) => ({
       ...current,
       historySets: current.historySets.filter((set) => set.id !== setId),
@@ -1459,7 +1589,26 @@ export function ManagerApp() {
     await refreshState(updated.historySets);
   };
 
+  const handleToggleSetLock = async (setId: string) => {
+    const updated = await updateState((current) => ({
+      ...current,
+      historySets: current.historySets.map((set) => {
+        if (set.id !== setId) {
+          return set;
+        }
+        return applySetLock(set, !set.locked);
+      }),
+    }));
+    await refreshState(updated.historySets);
+  };
+
   const handleDeleteTab = async (setId: string, tabToDelete: TabSnapshot) => {
+    const targetSet = fullSets.find((set) => set.id === setId);
+    const targetTab = targetSet?.tabs.find((tab) => tab.uid === tabToDelete.uid) ?? tabToDelete;
+    if (targetSet && isTabEffectivelyLocked(targetSet, targetTab)) {
+      setActionMessage('ロック中のタブは削除できません。');
+      return;
+    }
     const updated = await updateState((current) => ({
       ...current,
       historySets: current.historySets.map((set) => {
@@ -1472,6 +1621,22 @@ export function ManagerApp() {
           tabs: filteredTabs,
           groups: set.groups,
           layout: normalizeLayout(set.layout, set.groups, filteredTabs),
+        };
+      }),
+    }));
+    await refreshState(updated.historySets);
+  };
+
+  const handleToggleTabLock = async (setId: string, tabUid: string) => {
+    const updated = await updateState((current) => ({
+      ...current,
+      historySets: current.historySets.map((set) => {
+        if (set.id !== setId) {
+          return set;
+        }
+        return {
+          ...set,
+          tabs: set.tabs.map((tab) => (tab.uid === tabUid ? { ...tab, locked: !tab.locked } : tab)),
         };
       }),
     }));
@@ -1504,6 +1669,7 @@ export function ManagerApp() {
           title: '新規グループ',
           color: 'grey',
           index: set.groups.length,
+          locked: false,
         };
         const nextLayout = [
           ...normalizeLayout(set.layout, set.groups, set.tabs),
@@ -1539,11 +1705,33 @@ export function ManagerApp() {
   };
 
   const handleDeleteGroup = async (setId: string, groupUid: string) => {
+    const targetSet = fullSets.find((set) => set.id === setId);
+    if (targetSet && isGroupEffectivelyLocked(targetSet, groupUid)) {
+      setActionMessage('ロック中のグループは削除できません。');
+      return;
+    }
     const updated = await updateState((current) => ({
       ...current,
       historySets: current.historySets.map((set) =>
         set.id === setId ? deleteGroupFromHistorySet(set, groupUid) : set,
       ),
+    }));
+    await refreshState(updated.historySets);
+  };
+
+  const handleToggleGroupLock = async (setId: string, groupUid: string) => {
+    const updated = await updateState((current) => ({
+      ...current,
+      historySets: current.historySets.map((set) => {
+        if (set.id !== setId) {
+          return set;
+        }
+        const targetGroup = set.groups.find((group) => group.uid === groupUid);
+        if (!targetGroup) {
+          return set;
+        }
+        return applyGroupLock(set, groupUid, !targetGroup.locked);
+      }),
     }));
     await refreshState(updated.historySets);
   };
@@ -1777,6 +1965,12 @@ export function ManagerApp() {
                   onOpen: handleRestoreTab,
                   onRemove: (tab) => handleDeleteTab(set.id, tab),
                 });
+                const handleToggleGroupLockForSet = (groupUid: string) => {
+                  void handleToggleGroupLock(set.id, groupUid);
+                };
+                const handleToggleTabLockForSet = (tab: TabSnapshot) => {
+                  void handleToggleTabLock(set.id, tab.uid);
+                };
 
                 return (
                   <Fragment key={set.id}>
@@ -1792,13 +1986,16 @@ export function ManagerApp() {
                       }}
                       onRestoreSet={() => handleRestoreSet(set)}
                       onDeleteSet={() => handleDeleteSet(set.id)}
+                      onToggleSetLock={() => handleToggleSetLock(set.id)}
                       onRenameSet={(title) => handleRenameSet(set.id, title)}
                       onRestoreGroup={(groupId) => handleRestoreGroup(set, groupId)}
                       onRenameGroup={(groupUid, title) =>
                         handleRenameGroup(set.id, groupUid, title)
                       }
                       onDeleteGroup={(groupUid) => handleDeleteGroup(set.id, groupUid)}
+                      onToggleGroupLock={handleToggleGroupLockForSet}
                       onCreateGroup={() => handleCreateGroup(set.id)}
+                      onToggleTabLock={handleToggleTabLockForSet}
                       rowActions={rowActions}
                       activeDrop={activeDrop}
                       dropGapPx={dropGapPx}

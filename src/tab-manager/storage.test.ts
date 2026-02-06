@@ -53,6 +53,7 @@ describe('storage', () => {
           name: 'window-1',
           createdAt: 1,
           windowId: 2,
+          locked: false,
           managerBinding: null,
           tabs: [],
           groups: [],
@@ -84,6 +85,7 @@ describe('storage', () => {
           name: 'window-2',
           createdAt: 2,
           windowId: 3,
+          locked: false,
           managerBinding: null,
           tabs: [],
           groups: [],
@@ -107,16 +109,25 @@ describe('storage', () => {
             createdAt: 3,
             windowId: 4,
             name: 'window-3',
+            locked: false,
             managerBinding: { managerTabId: 99, managerWindowId: 4 },
-            groups: [{ uid: 'g-1', id: 1, title: 'Work', color: 'blue', index: 0 }],
+            groups: [{ uid: 'g-1', id: 1, title: 'Work', color: 'blue', index: 0, locked: false }],
             tabs: [
-              { uid: 't-1', title: 'Docs', url: 'https://docs.example.com', index: 0, groupId: 1 },
+              {
+                uid: 't-1',
+                title: 'Docs',
+                url: 'https://docs.example.com',
+                index: 0,
+                groupId: 1,
+                locked: false,
+              },
               {
                 uid: 't-2',
                 title: 'Mail',
                 url: 'https://mail.example.com',
                 index: 1,
                 groupId: null,
+                locked: false,
               },
             ],
           },
@@ -143,6 +154,7 @@ describe('storage', () => {
 
     expect(state.historySets[0]?.name).toBe(new Date(createdAt).toLocaleString());
     expect(state.historySets[0]?.managerBinding).toBeNull();
+    expect(state.historySets[0]?.locked).toBe(false);
   });
 
   it('name が空文字の履歴セットは既定名へ補完する', async () => {
@@ -156,6 +168,7 @@ describe('storage', () => {
             name: ' ',
             createdAt: 1,
             windowId: 1,
+            locked: false,
             managerBinding: { managerTabId: 11, managerWindowId: 1 },
             groups: [],
             tabs: [],
@@ -184,6 +197,7 @@ describe('storage', () => {
             name: 'window-6',
             createdAt: 1,
             windowId: 1,
+            locked: false,
             managerBinding: { managerTabId: 'x', managerWindowId: 1 },
             groups: [],
             tabs: [],
@@ -195,5 +209,40 @@ describe('storage', () => {
     const state = await getState(storage);
 
     expect(state.historySets[0]?.managerBinding).toBeNull();
+  });
+
+  it('locked が欠損している既存データは false で補完する', async () => {
+    const storage = createMemoryStorage({
+      tabManagerState: {
+        version: 1,
+        exclusions: [],
+        historySets: [
+          {
+            id: 'set-7',
+            name: 'window-7',
+            createdAt: 1,
+            windowId: 1,
+            managerBinding: null,
+            groups: [{ uid: 'g-7', id: 7, title: 'g', color: 'grey', index: 0 }],
+            tabs: [
+              {
+                uid: 't-7',
+                title: 'tab',
+                url: 'https://example.com',
+                index: 0,
+                groupId: 7,
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    const state = await getState(storage);
+    const set = state.historySets[0];
+
+    expect(set?.locked).toBe(false);
+    expect(set?.groups[0]?.locked).toBe(false);
+    expect(set?.tabs[0]?.locked).toBe(false);
   });
 });

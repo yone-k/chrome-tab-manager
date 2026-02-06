@@ -6,8 +6,8 @@ import { applyDragReorder } from './dragReorder';
 
 type SetInput = {
   id: string;
-  groups: Array<Pick<GroupSnapshot, 'uid' | 'id' | 'title' | 'color'>>;
-  tabs: Array<Pick<TabSnapshot, 'uid' | 'title' | 'url' | 'groupId'>>;
+  groups: Array<Pick<GroupSnapshot, 'uid' | 'id' | 'title' | 'color' | 'locked'>>;
+  tabs: Array<Pick<TabSnapshot, 'uid' | 'title' | 'url' | 'groupId' | 'locked'>>;
 };
 
 function makeSet(input: SetInput): HistorySet {
@@ -24,6 +24,7 @@ function makeSet(input: SetInput): HistorySet {
     name: input.id,
     createdAt: 1700000000000,
     windowId: 1,
+    locked: false,
     managerBinding: null,
     groups,
     tabs,
@@ -62,16 +63,16 @@ describe('applyDragReorder', () => {
   it('グループを別セッションへ移動し、ID衝突時は新しいIDを付与する', () => {
     const setA = makeSet({
       id: 'set-a',
-      groups: [{ uid: 'g-a', id: 1, title: 'A', color: 'blue' }],
+      groups: [{ uid: 'g-a', id: 1, title: 'A', color: 'blue', locked: false }],
       tabs: [
-        { uid: 't-a', title: 'A1', url: 'https://a.com', groupId: 1 },
-        { uid: 't-a2', title: 'A2', url: 'https://a2.com', groupId: 1 },
+        { uid: 't-a', title: 'A1', url: 'https://a.com', groupId: 1, locked: false },
+        { uid: 't-a2', title: 'A2', url: 'https://a2.com', groupId: 1, locked: false },
       ],
     });
     const setB = makeSet({
       id: 'set-b',
-      groups: [{ uid: 'g-b', id: 1, title: 'B', color: 'red' }],
-      tabs: [{ uid: 't-b', title: 'B1', url: 'https://b.com', groupId: 1 }],
+      groups: [{ uid: 'g-b', id: 1, title: 'B', color: 'red', locked: false }],
+      tabs: [{ uid: 't-b', title: 'B1', url: 'https://b.com', groupId: 1, locked: false }],
     });
 
     const result = applyDragReorder(
@@ -94,13 +95,13 @@ describe('applyDragReorder', () => {
   it('タブを別セッションのグループへ移動する', () => {
     const setA = makeSet({
       id: 'set-a',
-      groups: [{ uid: 'g-a', id: 1, title: 'A', color: 'blue' }],
-      tabs: [{ uid: 't-a', title: 'A1', url: 'https://a.com', groupId: 1 }],
+      groups: [{ uid: 'g-a', id: 1, title: 'A', color: 'blue', locked: false }],
+      tabs: [{ uid: 't-a', title: 'A1', url: 'https://a.com', groupId: 1, locked: false }],
     });
     const setB = makeSet({
       id: 'set-b',
-      groups: [{ uid: 'g-b', id: 2, title: 'B', color: 'red' }],
-      tabs: [{ uid: 't-b', title: 'B1', url: 'https://b.com', groupId: 2 }],
+      groups: [{ uid: 'g-b', id: 2, title: 'B', color: 'red', locked: false }],
+      tabs: [{ uid: 't-b', title: 'B1', url: 'https://b.com', groupId: 2, locked: false }],
     });
 
     const result = applyDragReorder(
@@ -121,10 +122,10 @@ describe('applyDragReorder', () => {
   it('タブを未グループへ移動しても空グループを維持する', () => {
     const set = makeSet({
       id: 'set-a',
-      groups: [{ uid: 'g-a', id: 1, title: 'A', color: 'blue' }],
+      groups: [{ uid: 'g-a', id: 1, title: 'A', color: 'blue', locked: false }],
       tabs: [
-        { uid: 't-a', title: 'A1', url: 'https://a.com', groupId: 1 },
-        { uid: 't-b', title: 'B1', url: 'https://b.com', groupId: null },
+        { uid: 't-a', title: 'A1', url: 'https://a.com', groupId: 1, locked: false },
+        { uid: 't-b', title: 'B1', url: 'https://b.com', groupId: null, locked: false },
       ],
     });
 

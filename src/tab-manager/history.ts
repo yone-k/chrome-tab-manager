@@ -9,6 +9,7 @@ export type TabInput = {
   url?: string;
   index: number;
   groupId?: number;
+  locked?: boolean;
 };
 
 export type GroupInput = {
@@ -16,6 +17,7 @@ export type GroupInput = {
   title?: string;
   color?: chrome.tabGroups.ColorEnum;
   index?: number;
+  locked?: boolean;
 };
 
 type BuildHistorySetInput = {
@@ -23,6 +25,7 @@ type BuildHistorySetInput = {
   name: string;
   createdAt: number;
   windowId: number;
+  locked?: boolean;
   managerBinding?: ManagerBinding | null;
   tabs: TabInput[];
   groups: GroupInput[];
@@ -48,6 +51,7 @@ function normalizeTab(tab: TabInput): TabSnapshot {
     url,
     index: tab.index,
     groupId,
+    locked: tab.locked ?? false,
   };
 }
 
@@ -58,6 +62,7 @@ function normalizeGroup(group: GroupInput, fallbackIndex: number): GroupSnapshot
     title: group.title?.trim() || 'Untitled Group',
     color: group.color ?? 'grey',
     index: group.index ?? fallbackIndex,
+    locked: group.locked ?? false,
   };
 }
 
@@ -87,6 +92,7 @@ export function buildHistorySet(input: BuildHistorySetInput): HistorySet {
     name: normalizeManualHistorySetName(input.name),
     createdAt: input.createdAt,
     windowId: input.windowId,
+    locked: input.locked ?? false,
     managerBinding: input.managerBinding ?? null,
     tabs,
     groups,

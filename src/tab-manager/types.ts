@@ -4,6 +4,7 @@ export type GroupSnapshot = {
   title: string;
   color: chrome.tabGroups.ColorEnum;
   index: number;
+  locked: boolean;
 };
 
 export type LayoutItem = { type: 'group'; uid: string } | { type: 'tab'; uid: string };
@@ -14,6 +15,7 @@ export type TabSnapshot = {
   url: string;
   index: number;
   groupId: number | null;
+  locked: boolean;
 };
 
 export type ManagerBinding = {
@@ -26,6 +28,7 @@ export type HistorySet = {
   name: string;
   createdAt: number;
   windowId: number;
+  locked: boolean;
   managerBinding: ManagerBinding | null;
   tabs: TabSnapshot[];
   groups: GroupSnapshot[];

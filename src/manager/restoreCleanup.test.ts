@@ -9,16 +9,45 @@ const sampleSet: HistorySet = {
   name: 'window-1',
   createdAt: 1,
   windowId: 1,
+  locked: false,
   managerBinding: null,
   groups: [
-    { uid: 'g-1', id: 1, title: 'Work', color: 'blue', index: 0 },
-    { uid: 'g-2', id: 2, title: 'Read', color: 'red', index: 1 },
+    { uid: 'g-1', id: 1, title: 'Work', color: 'blue', index: 0, locked: false },
+    { uid: 'g-2', id: 2, title: 'Read', color: 'red', index: 1, locked: false },
   ],
   tabs: [
-    { uid: 't-1', title: 'Docs', url: 'https://docs.example.com', index: 0, groupId: 1 },
-    { uid: 't-2', title: 'Mail', url: 'https://mail.example.com', index: 1, groupId: 1 },
-    { uid: 't-3', title: 'News', url: 'https://news.example.com', index: 2, groupId: null },
-    { uid: 't-4', title: 'Blog', url: 'https://blog.example.com', index: 3, groupId: 2 },
+    {
+      uid: 't-1',
+      title: 'Docs',
+      url: 'https://docs.example.com',
+      index: 0,
+      groupId: 1,
+      locked: false,
+    },
+    {
+      uid: 't-2',
+      title: 'Mail',
+      url: 'https://mail.example.com',
+      index: 1,
+      groupId: 1,
+      locked: false,
+    },
+    {
+      uid: 't-3',
+      title: 'News',
+      url: 'https://news.example.com',
+      index: 2,
+      groupId: null,
+      locked: false,
+    },
+    {
+      uid: 't-4',
+      title: 'Blog',
+      url: 'https://blog.example.com',
+      index: 3,
+      groupId: 2,
+      locked: false,
+    },
   ],
   layout: [],
 };
@@ -27,8 +56,22 @@ sampleSet.layout = buildLayoutFromData(sampleSet.groups, sampleSet.tabs);
 describe('cleanupHistorySet', () => {
   it('復元済みタブを削除し、空のグループを残す', () => {
     const restored: TabSnapshot[] = [
-      { uid: 't-1', title: 'Docs', url: 'https://docs.example.com', index: 0, groupId: 1 },
-      { uid: 't-4', title: 'Blog', url: 'https://blog.example.com', index: 3, groupId: 2 },
+      {
+        uid: 't-1',
+        title: 'Docs',
+        url: 'https://docs.example.com',
+        index: 0,
+        groupId: 1,
+        locked: false,
+      },
+      {
+        uid: 't-4',
+        title: 'Blog',
+        url: 'https://blog.example.com',
+        index: 3,
+        groupId: 2,
+        locked: false,
+      },
     ];
 
     const result = cleanupHistorySet(sampleSet, restored);
@@ -62,8 +105,22 @@ describe('cleanupHistorySet', () => {
 
   it('pruneEmptyGroups=true の場合は空グループを削除する', () => {
     const restored: TabSnapshot[] = [
-      { uid: 't-1', title: 'Docs', url: 'https://docs.example.com', index: 0, groupId: 1 },
-      { uid: 't-4', title: 'Blog', url: 'https://blog.example.com', index: 3, groupId: 2 },
+      {
+        uid: 't-1',
+        title: 'Docs',
+        url: 'https://docs.example.com',
+        index: 0,
+        groupId: 1,
+        locked: false,
+      },
+      {
+        uid: 't-4',
+        title: 'Blog',
+        url: 'https://blog.example.com',
+        index: 3,
+        groupId: 2,
+        locked: false,
+      },
     ];
 
     const result = cleanupHistorySet(sampleSet, restored, { pruneEmptyGroups: true });
@@ -80,5 +137,31 @@ describe('cleanupHistorySet', () => {
 
     expect(result.tabs).toEqual([]);
     expect(result.groups).toEqual([]);
+  });
+
+  it('ロックされたタブは復元後も履歴に残す', () => {
+    const setWithLockedTab: HistorySet = {
+      ...sampleSet,
+      tabs: sampleSet.tabs.map((tab) => (tab.uid === 't-1' ? { ...tab, locked: true } : tab)),
+    };
+
+    const result = cleanupHistorySet(setWithLockedTab, [setWithLockedTab.tabs[0]!]);
+
+    expect(result.tabs.map((tab) => tab.uid)).toContain('t-1');
+  });
+
+  it('pruneEmptyGroups=true でもロックされたグループは残す', () => {
+    const setWithLockedGroup: HistorySet = {
+      ...sampleSet,
+      groups: sampleSet.groups.map((group) =>
+        group.uid === 'g-2' ? { ...group, locked: true } : group,
+      ),
+    };
+
+    const result = cleanupHistorySet(setWithLockedGroup, sampleSet.tabs, {
+      pruneEmptyGroups: true,
+    });
+
+    expect(result.groups.map((group) => group.uid)).toEqual(['g-2']);
   });
 });

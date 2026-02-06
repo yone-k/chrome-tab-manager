@@ -94,6 +94,7 @@ function normalizeHistorySets(rawSets: unknown): HistorySet[] {
         title: typeof group.title === 'string' ? group.title : 'Untitled Group',
         color: isTabGroupColor(group.color) ? group.color : 'grey',
         index: typeof group.index === 'number' ? group.index : 0,
+        locked: typeof group.locked === 'boolean' ? group.locked : false,
       }));
       const normalizedTabs = tabs.filter(isRecord).map((tab) => ({
         uid: typeof tab.uid === 'string' ? tab.uid : createUid('tab'),
@@ -101,12 +102,14 @@ function normalizeHistorySets(rawSets: unknown): HistorySet[] {
         url: typeof tab.url === 'string' ? tab.url : '',
         index: typeof tab.index === 'number' ? tab.index : 0,
         groupId: typeof tab.groupId === 'number' ? tab.groupId : null,
+        locked: typeof tab.locked === 'boolean' ? tab.locked : false,
       }));
       const normalizedSet: HistorySet = {
         id: typeof raw.id === 'string' ? raw.id : createUid('set'),
         name: normalizedName,
         createdAt,
         windowId: typeof raw.windowId === 'number' ? raw.windowId : 0,
+        locked: typeof raw.locked === 'boolean' ? raw.locked : false,
         managerBinding: normalizeManagerBinding(raw.managerBinding),
         groups: normalizedGroups,
         tabs: normalizedTabs,

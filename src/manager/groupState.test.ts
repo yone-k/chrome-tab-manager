@@ -6,8 +6,8 @@ import { deleteGroupFromHistorySet } from './groupState';
 
 type SetInput = {
   id: string;
-  groups: Array<Pick<GroupSnapshot, 'uid' | 'id' | 'title' | 'color'>>;
-  tabs: Array<Pick<TabSnapshot, 'uid' | 'title' | 'url' | 'groupId'>>;
+  groups: Array<Pick<GroupSnapshot, 'uid' | 'id' | 'title' | 'color' | 'locked'>>;
+  tabs: Array<Pick<TabSnapshot, 'uid' | 'title' | 'url' | 'groupId' | 'locked'>>;
 };
 
 function makeSet(input: SetInput): HistorySet {
@@ -18,6 +18,7 @@ function makeSet(input: SetInput): HistorySet {
     name: input.id,
     createdAt: 1700000000000,
     windowId: 1,
+    locked: false,
     managerBinding: null,
     groups,
     tabs,
@@ -29,11 +30,23 @@ describe('deleteGroupFromHistorySet', () => {
   it('グループ削除時に所属タブを未グループ化し、削除位置へ展開する', () => {
     const set = makeSet({
       id: 'set-a',
-      groups: [{ uid: 'g-a', id: 1, title: 'A', color: 'blue' }],
+      groups: [{ uid: 'g-a', id: 1, title: 'A', color: 'blue', locked: false }],
       tabs: [
-        { uid: 't-0', title: 'ungrouped-1', url: 'https://0.example.com', groupId: null },
-        { uid: 't-1', title: 'grouped', url: 'https://1.example.com', groupId: 1 },
-        { uid: 't-2', title: 'ungrouped-2', url: 'https://2.example.com', groupId: null },
+        {
+          uid: 't-0',
+          title: 'ungrouped-1',
+          url: 'https://0.example.com',
+          groupId: null,
+          locked: false,
+        },
+        { uid: 't-1', title: 'grouped', url: 'https://1.example.com', groupId: 1, locked: false },
+        {
+          uid: 't-2',
+          title: 'ungrouped-2',
+          url: 'https://2.example.com',
+          groupId: null,
+          locked: false,
+        },
       ],
     });
 
@@ -51,8 +64,16 @@ describe('deleteGroupFromHistorySet', () => {
   it('空グループ削除時にレイアウトからのみ取り除く', () => {
     const set = makeSet({
       id: 'set-a',
-      groups: [{ uid: 'g-a', id: 1, title: 'A', color: 'blue' }],
-      tabs: [{ uid: 't-0', title: 'ungrouped-1', url: 'https://0.example.com', groupId: null }],
+      groups: [{ uid: 'g-a', id: 1, title: 'A', color: 'blue', locked: false }],
+      tabs: [
+        {
+          uid: 't-0',
+          title: 'ungrouped-1',
+          url: 'https://0.example.com',
+          groupId: null,
+          locked: false,
+        },
+      ],
     });
 
     const updated = deleteGroupFromHistorySet(set, 'g-a');
