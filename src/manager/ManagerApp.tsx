@@ -35,6 +35,7 @@ import { deleteGroupFromHistorySet } from './groupState';
 import { cleanupHistorySet } from './restoreCleanup';
 import { shouldSuppressRestoreLoading } from './restorePolicy';
 import { resolveRestoreTarget } from './restoreTarget';
+import { removeSetsEmptiedSince, removeSetsWithNoTabs } from './setCleanup';
 import { createTabRowActions } from './tabRowActions';
 import type { DragItem, DropTarget } from './dragReorder';
 import { applyDragReorder } from './dragReorder';
@@ -1390,7 +1391,11 @@ export function ManagerApp() {
       return;
     }
 
-    const nextSets = applyDragReorder(fullSets, data.dragItem, dropTarget);
+    const reorderedSets = applyDragReorder(fullSets, data.dragItem, dropTarget);
+    const nextSets =
+      data.dragItem.type === 'set'
+        ? reorderedSets
+        : removeSetsEmptiedSince(fullSets, reorderedSets);
     if (nextSets === fullSets) {
       setActiveDrag(null);
       setActiveDrop(null);
@@ -1626,9 +1631,13 @@ export function ManagerApp() {
       if (removeRestoredTabsEnabled) {
         const updated = await updateState((current) => ({
           ...current,
-          historySets: current.historySets.map((item) =>
-            item.id === targetSet.id ? cleanupHistorySet(item, restoredTabs) : item,
-          ),
+          historySets: current.historySets.flatMap((item) => {
+            if (item.id !== targetSet.id) {
+              return [item];
+            }
+            const cleaned = cleanupHistorySet(item, restoredTabs);
+            return cleaned.tabs.length === 0 ? [] : [cleaned];
+          }),
         }));
         await refreshState(updated.historySets);
       }
@@ -1658,7 +1667,9 @@ export function ManagerApp() {
       if (removeRestoredTabsEnabled) {
         const updated = await updateState((current) => ({
           ...current,
-          historySets: current.historySets.map((item) => cleanupHistorySet(item, restoredTabs)),
+          historySets: removeSetsWithNoTabs(
+            current.historySets.map((item) => cleanupHistorySet(item, restoredTabs)),
+          ),
         }));
         await refreshState(updated.historySets);
       }
