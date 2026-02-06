@@ -9,6 +9,7 @@ const sampleSet: HistorySet = {
   name: 'window-1',
   createdAt: 1,
   windowId: 1,
+  managerBinding: null,
   groups: [
     { uid: 'g-1', id: 1, title: 'Work', color: 'blue', index: 0 },
     { uid: 'g-2', id: 2, title: 'Read', color: 'red', index: 1 },

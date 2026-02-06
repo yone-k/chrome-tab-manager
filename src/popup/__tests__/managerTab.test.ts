@@ -43,19 +43,26 @@ function installChromeMock({
       callback();
     },
   );
-  const create = vi.fn((createProperties: chrome.tabs.CreateProperties, callback: () => void) => {
-    createTab?.(createProperties);
-    if (
-      typeof failCreateWithWindowId === 'number' &&
-      createProperties.windowId === failCreateWithWindowId
-    ) {
-      runtimeLastError = { message: 'No window with id' };
-      callback();
-      runtimeLastError = undefined;
-      return;
-    }
-    callback();
-  });
+  let createCounter = 0;
+  const create = vi.fn(
+    (createProperties: chrome.tabs.CreateProperties, callback: (tab: chrome.tabs.Tab) => void) => {
+      createCounter += 1;
+      createTab?.(createProperties);
+      if (
+        typeof failCreateWithWindowId === 'number' &&
+        createProperties.windowId === failCreateWithWindowId
+      ) {
+        runtimeLastError = { message: 'No window with id' };
+        callback({} as chrome.tabs.Tab);
+        runtimeLastError = undefined;
+        return;
+      }
+      callback({
+        id: 1000 + createCounter,
+        windowId: createProperties.windowId ?? 7000,
+      } as chrome.tabs.Tab);
+    },
+  );
   const getCurrent = vi.fn((callback: (window: chrome.windows.Window) => void) => {
     callback((getCurrentWindow ?? { id: 1 }) as chrome.windows.Window);
   });
@@ -183,27 +190,33 @@ describe('ensureManagerTabInWindow', () => {
     vi.unstubAllGlobals();
   });
 
-  it('同一ウィンドウに既存管理画面がある場合は新規作成しない', async () => {
+  it('同一ウィンドウに既存管理画面がある場合は紐づけを返して新規作成しない', async () => {
     const { update, create } = installChromeMock({
       queryTabs: [{ id: 10, windowId: 123, url: managerUrl }],
     });
 
-    await ensureManagerTabInWindow(123, 5);
+    const binding = await ensureManagerTabInWindow(123, 5);
 
+    expect(binding).toEqual({ managerTabId: 10, managerWindowId: 123 });
     expect(create).not.toHaveBeenCalled();
     expect(update).not.toHaveBeenCalled();
   });
 
-  it('同一ウィンドウにない場合は非アクティブで作成する', async () => {
+  it('同一ウィンドウにない場合は非アクティブで作成して紐づけを返す', async () => {
     const { create } = installChromeMock({
       queryTabs: [{ id: 10, windowId: 999, url: managerUrl }],
+      createTab: (createProperties) => {
+        expect(createProperties.windowId).toBe(123);
+      },
     });
 
-    await ensureManagerTabInWindow(123, 7);
+    const binding = await ensureManagerTabInWindow(123, 7);
 
     expect(create).toHaveBeenCalledWith(
       { url: managerUrl, windowId: 123, active: false, index: 7 },
       expect.any(Function),
     );
+    expect(binding.managerWindowId).toBe(123);
+    expect(typeof binding.managerTabId).toBe('number');
   });
 });

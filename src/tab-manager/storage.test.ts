@@ -53,6 +53,7 @@ describe('storage', () => {
           name: 'window-1',
           createdAt: 1,
           windowId: 2,
+          managerBinding: null,
           tabs: [],
           groups: [],
           layout: [],
@@ -83,6 +84,7 @@ describe('storage', () => {
           name: 'window-2',
           createdAt: 2,
           windowId: 3,
+          managerBinding: null,
           tabs: [],
           groups: [],
           layout: [],
@@ -105,6 +107,7 @@ describe('storage', () => {
             createdAt: 3,
             windowId: 4,
             name: 'window-3',
+            managerBinding: { managerTabId: 99, managerWindowId: 4 },
             groups: [{ uid: 'g-1', id: 1, title: 'Work', color: 'blue', index: 0 }],
             tabs: [
               { uid: 't-1', title: 'Docs', url: 'https://docs.example.com', index: 0, groupId: 1 },
@@ -139,6 +142,7 @@ describe('storage', () => {
     const state = await getState(storage);
 
     expect(state.historySets[0]?.name).toBe(new Date(createdAt).toLocaleString());
+    expect(state.historySets[0]?.managerBinding).toBeNull();
   });
 
   it('name が空文字の履歴セットは既定名へ補完する', async () => {
@@ -146,12 +150,50 @@ describe('storage', () => {
       tabManagerState: {
         version: 1,
         exclusions: [],
-        historySets: [{ id: 'set-5', name: ' ', createdAt: 1, windowId: 1, groups: [], tabs: [] }],
+        historySets: [
+          {
+            id: 'set-5',
+            name: ' ',
+            createdAt: 1,
+            windowId: 1,
+            managerBinding: { managerTabId: 11, managerWindowId: 1 },
+            groups: [],
+            tabs: [],
+          },
+        ],
       },
     });
 
     const state = await getState(storage);
 
     expect(state.historySets[0]?.name).toBe('新規ウィンドウ');
+    expect(state.historySets[0]?.managerBinding).toEqual({
+      managerTabId: 11,
+      managerWindowId: 1,
+    });
+  });
+
+  it('managerBinding が不正値の場合は null に正規化する', async () => {
+    const storage = createMemoryStorage({
+      tabManagerState: {
+        version: 1,
+        exclusions: [],
+        historySets: [
+          {
+            id: 'set-6',
+            name: 'window-6',
+            createdAt: 1,
+            windowId: 1,
+            managerBinding: { managerTabId: 'x', managerWindowId: 1 },
+            groups: [],
+            tabs: [],
+          },
+        ],
+      },
+    });
+
+    const state = await getState(storage);
+
+    expect(state.historySets[0]?.managerBinding).toBeNull();
   });
 });

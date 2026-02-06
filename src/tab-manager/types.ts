@@ -16,11 +16,17 @@ export type TabSnapshot = {
   groupId: number | null;
 };
 
+export type ManagerBinding = {
+  managerTabId: number;
+  managerWindowId: number;
+};
+
 export type HistorySet = {
   id: string;
   name: string;
   createdAt: number;
   windowId: number;
+  managerBinding: ManagerBinding | null;
   tabs: TabSnapshot[];
   groups: GroupSnapshot[];
   layout: LayoutItem[];

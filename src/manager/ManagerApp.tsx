@@ -34,6 +34,7 @@ import { createUid } from '../tab-manager/uid';
 import { deleteGroupFromHistorySet } from './groupState';
 import { cleanupHistorySet } from './restoreCleanup';
 import { shouldSuppressRestoreLoading } from './restorePolicy';
+import { resolveRestoreTarget } from './restoreTarget';
 import { createTabRowActions } from './tabRowActions';
 import type { DragItem, DropTarget } from './dragReorder';
 import { applyDragReorder } from './dragReorder';
@@ -879,6 +880,60 @@ async function getCurrentWindowId() {
   });
 }
 
+async function getCurrentManagerContext() {
+  return new Promise<{ tabId: number; windowId: number }>((resolve, reject) => {
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs: chrome.tabs.Tab[]) => {
+      if (chrome.runtime.lastError) {
+        reject(chrome.runtime.lastError);
+        return;
+      }
+      const tab = tabs.find(
+        (item) => typeof item.id === 'number' && typeof item.windowId === 'number',
+      );
+      if (!tab || tab.id === undefined || tab.windowId === undefined) {
+        reject(new Error('現在の管理画面タブ情報を取得できませんでした。'));
+        return;
+      }
+      resolve({ tabId: tab.id, windowId: tab.windowId });
+    });
+  });
+}
+
+async function createRestoreWindow() {
+  return new Promise<{ windowId: number; initialTabId: number | null }>((resolve, reject) => {
+    chrome.windows.create({ focused: true }, (window: chrome.windows.Window | undefined) => {
+      if (chrome.runtime.lastError) {
+        reject(chrome.runtime.lastError);
+        return;
+      }
+      if (!window?.id) {
+        reject(new Error('復元先ウィンドウを作成できませんでした。'));
+        return;
+      }
+      chrome.tabs.query({ windowId: window.id }, (tabs: chrome.tabs.Tab[]) => {
+        if (chrome.runtime.lastError) {
+          reject(chrome.runtime.lastError);
+          return;
+        }
+        const initialTab = tabs.find((tab) => typeof tab.id === 'number') ?? null;
+        resolve({ windowId: window.id!, initialTabId: initialTab?.id ?? null });
+      });
+    });
+  });
+}
+
+async function removeTab(tabId: number) {
+  return new Promise<void>((resolve, reject) => {
+    chrome.tabs.remove(tabId, () => {
+      if (chrome.runtime.lastError) {
+        reject(chrome.runtime.lastError);
+        return;
+      }
+      resolve();
+    });
+  });
+}
+
 async function createTab(windowId: number, url: string) {
   return new Promise<chrome.tabs.Tab>((resolve, reject) => {
     chrome.tabs.create({ windowId, url, active: false }, (tab: chrome.tabs.Tab) => {
@@ -1365,6 +1420,7 @@ export function ManagerApp() {
       name: DEFAULT_NEW_WINDOW_NAME,
       createdAt,
       windowId: 0,
+      managerBinding: null,
       tabs: [],
       groups: [],
       layout: [],
@@ -1478,13 +1534,28 @@ export function ManagerApp() {
     setActionMessage('タブを復元しています...');
     try {
       const targetSet = fullSets.find((item) => item.id === set.id) ?? set;
-      const windowId = await getCurrentWindowId();
+      const currentManager = await getCurrentManagerContext();
+      const restoreTarget = resolveRestoreTarget(
+        targetSet.managerBinding,
+        currentManager.tabId,
+        currentManager.windowId,
+      );
+      const restoreWindow = restoreTarget === 'new-window' ? await createRestoreWindow() : null;
+      const windowId = restoreWindow?.windowId ?? currentManager.windowId;
       const { restoredTabs, failedTabs } = await restoreTabs(
         targetSet.tabs,
         targetSet.groups,
         windowId,
         restoreLoadingSuppressionEnabled,
       );
+      const initialTabId = restoreWindow?.initialTabId ?? null;
+      if (initialTabId !== null && restoredTabs.length > 0) {
+        try {
+          await removeTab(initialTabId);
+        } catch (err) {
+          console.error('Failed to remove initial tab in restore window', err);
+        }
+      }
       if (removeRestoredTabsEnabled) {
         const updated = await updateState((current) => ({
           ...current,

@@ -1,4 +1,5 @@
 import { getTabUrl } from '../tab-manager/exclusions';
+import type { ManagerBinding } from '../tab-manager/types';
 
 function queryManagerTabs(managerUrl: string) {
   return new Promise<chrome.tabs.Tab[]>((resolve, reject) => {
@@ -47,7 +48,7 @@ type CreateManagerTabOptions = {
 };
 
 function createManagerTab(managerUrl: string, options: CreateManagerTabOptions = {}) {
-  return new Promise<void>((resolve, reject) => {
+  return new Promise<chrome.tabs.Tab>((resolve, reject) => {
     const createProperties: chrome.tabs.CreateProperties = { url: managerUrl };
     if (typeof options.active === 'boolean') {
       createProperties.active = options.active;
@@ -58,12 +59,12 @@ function createManagerTab(managerUrl: string, options: CreateManagerTabOptions =
     if (typeof options.index === 'number') {
       createProperties.index = options.index;
     }
-    chrome.tabs.create(createProperties, () => {
+    chrome.tabs.create(createProperties, (tab: chrome.tabs.Tab) => {
       if (chrome.runtime.lastError) {
         reject(chrome.runtime.lastError);
         return;
       }
-      resolve();
+      resolve(tab);
     });
   });
 }
@@ -81,17 +82,30 @@ export function filterOutManagerTabs<
   return tabs.filter((tab) => getTabUrl(tab) !== managerUrl);
 }
 
-export async function ensureManagerTabInWindow(windowId: number, preferredIndex?: number) {
+export async function ensureManagerTabInWindow(
+  windowId: number,
+  preferredIndex?: number,
+): Promise<ManagerBinding> {
   const managerUrl = chrome.runtime.getURL('manager.html');
   const managerTabs = await queryManagerTabs(managerUrl);
   const existing = findManagerTabInWindow(managerTabs, windowId);
 
-  if (existing?.id !== undefined) {
-    return;
+  if (existing?.id !== undefined && existing.windowId !== undefined) {
+    return {
+      managerTabId: existing.id,
+      managerWindowId: existing.windowId,
+    };
   }
 
   const index = typeof preferredIndex === 'number' ? preferredIndex : undefined;
-  await createManagerTab(managerUrl, { windowId, active: false, index });
+  const created = await createManagerTab(managerUrl, { windowId, active: false, index });
+  if (created.id === undefined || created.windowId === undefined) {
+    throw new Error('管理画面タブの作成に失敗しました。');
+  }
+  return {
+    managerTabId: created.id,
+    managerWindowId: created.windowId,
+  };
 }
 
 export async function openManagerTabInCurrentWindow(currentWindowId?: number) {

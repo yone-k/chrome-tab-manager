@@ -89,6 +89,11 @@ export function App() {
         return;
       }
       const groups = await queryTabGroups(windowId);
+      const activeTab = tabs.find((tab) => tab.active);
+      const managerBinding = await ensureManagerTabInWindow(
+        windowId,
+        typeof activeTab?.index === 'number' ? activeTab.index + 1 : undefined,
+      );
       const tabInputs: TabInput[] = savableTabs.map((tab) => ({
         title: tab.title ?? '',
         url: getTabUrl(tab),
@@ -106,6 +111,7 @@ export function App() {
         name: formatHistorySetNameFromCreatedAt(createdAt),
         createdAt,
         windowId,
+        managerBinding,
         tabs: tabInputs,
         groups: groupInputs,
       });
@@ -113,15 +119,10 @@ export function App() {
       const tabIds = savableTabs
         .map((tab) => tab.id)
         .filter((id): id is number => typeof id === 'number');
-      const activeTab = tabs.find((tab) => tab.active);
       await updateState((state) => ({
         ...state,
         historySets: [historySet, ...state.historySets],
       }));
-      await ensureManagerTabInWindow(
-        windowId,
-        typeof activeTab?.index === 'number' ? activeTab.index + 1 : undefined,
-      );
       if (tabIds.length > 0) {
         await closeTabs(tabIds);
       } else {

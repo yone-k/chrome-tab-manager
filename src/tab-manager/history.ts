@@ -1,4 +1,4 @@
-import type { GroupSnapshot, HistorySet, TabSnapshot } from './types';
+import type { GroupSnapshot, HistorySet, ManagerBinding, TabSnapshot } from './types';
 import { buildLayoutFromData } from './layout';
 import { createUid } from './uid';
 
@@ -23,6 +23,7 @@ type BuildHistorySetInput = {
   name: string;
   createdAt: number;
   windowId: number;
+  managerBinding?: ManagerBinding | null;
   tabs: TabInput[];
   groups: GroupInput[];
 };
@@ -86,6 +87,7 @@ export function buildHistorySet(input: BuildHistorySetInput): HistorySet {
     name: normalizeManualHistorySetName(input.name),
     createdAt: input.createdAt,
     windowId: input.windowId,
+    managerBinding: input.managerBinding ?? null,
     tabs,
     groups,
     layout: buildLayoutFromData(groups, tabs),

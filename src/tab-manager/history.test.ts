@@ -9,6 +9,10 @@ describe('buildHistorySet', () => {
       name: 'window-1',
       createdAt: 1700000000000,
       windowId: 5,
+      managerBinding: {
+        managerTabId: 10,
+        managerWindowId: 5,
+      },
       tabs: [
         { title: 'A', url: 'https://a.com', index: 2, groupId: 1 },
         { title: 'B', url: 'https://b.com', index: 1, groupId: -1 },
@@ -30,6 +34,7 @@ describe('buildHistorySet', () => {
       name: 'window-1',
       createdAt: 1700000000000,
       windowId: 5,
+      managerBinding: { managerTabId: 10, managerWindowId: 5 },
     });
   });
 
@@ -39,6 +44,7 @@ describe('buildHistorySet', () => {
       name: '   ',
       createdAt: 1700000000000,
       windowId: 5,
+      managerBinding: null,
       tabs: [],
       groups: [],
     });

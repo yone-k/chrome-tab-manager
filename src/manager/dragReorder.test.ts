@@ -24,6 +24,7 @@ function makeSet(input: SetInput): HistorySet {
     name: input.id,
     createdAt: 1700000000000,
     windowId: 1,
+    managerBinding: null,
     groups,
     tabs,
     layout: buildLayoutFromData(groups, tabs),

@@ -58,6 +58,19 @@ function isTabGroupColor(value: unknown): value is chrome.tabGroups.ColorEnum {
   return typeof value === 'string' && TAB_GROUP_COLORS.some((color) => color === value);
 }
 
+function normalizeManagerBinding(raw: unknown): HistorySet['managerBinding'] {
+  if (!isRecord(raw)) {
+    return null;
+  }
+  if (typeof raw.managerTabId !== 'number' || typeof raw.managerWindowId !== 'number') {
+    return null;
+  }
+  return {
+    managerTabId: raw.managerTabId,
+    managerWindowId: raw.managerWindowId,
+  };
+}
+
 function normalizeHistorySets(rawSets: unknown): HistorySet[] {
   if (!Array.isArray(rawSets)) {
     return [];
@@ -94,6 +107,7 @@ function normalizeHistorySets(rawSets: unknown): HistorySet[] {
         name: normalizedName,
         createdAt,
         windowId: typeof raw.windowId === 'number' ? raw.windowId : 0,
+        managerBinding: normalizeManagerBinding(raw.managerBinding),
         groups: normalizedGroups,
         tabs: normalizedTabs,
         layout: normalizeLayout(raw.layout, normalizedGroups, normalizedTabs),

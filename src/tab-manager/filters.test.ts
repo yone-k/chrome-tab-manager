@@ -15,6 +15,7 @@ const historySets: HistorySet[] = [
     name: 'window-1',
     createdAt: 1,
     windowId: 1,
+    managerBinding: null,
     groups: [
       { uid: 'g-1', id: 1, title: 'Work', color: 'blue', index: 0 },
       { uid: 'g-2', id: 2, title: 'Read', color: 'red', index: 1 },
@@ -32,6 +33,7 @@ const historySets: HistorySet[] = [
     name: 'window-2',
     createdAt: 2,
     windowId: 2,
+    managerBinding: null,
     groups: [{ uid: 'g-3', id: 3, title: 'Read', color: 'green', index: 0 }],
     tabs: [
       { uid: 't-4', title: 'Blog', url: 'https://blog.example.com', index: 0, groupId: 3 },
