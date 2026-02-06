@@ -31,6 +31,7 @@ import { normalizeLayout } from '../tab-manager/layout';
 import { getState, STATE_KEY, updateState } from '../tab-manager/storage';
 import type { GroupSnapshot, HistorySet, TabSnapshot } from '../tab-manager/types';
 import { createUid } from '../tab-manager/uid';
+import { deleteGroupFromHistorySet } from './groupState';
 import { cleanupHistorySet } from './restoreCleanup';
 import { shouldSuppressRestoreLoading } from './restorePolicy';
 import { createTabRowActions } from './tabRowActions';
@@ -448,6 +449,7 @@ type BlockListProps = {
   reorderEnabled: boolean;
   onRestoreGroup: (groupId: number) => void;
   onRenameGroup: (groupUid: string, title: string) => void;
+  onDeleteGroup: (groupUid: string) => void;
   rowActions: TabRowActions;
   activeDrop: ActiveDrop | null;
   dropGapPx: number;
@@ -477,6 +479,7 @@ function BlockList({
   reorderEnabled,
   onRestoreGroup,
   onRenameGroup,
+  onDeleteGroup,
   rowActions,
   activeDrop,
   dropGapPx,
@@ -501,6 +504,7 @@ function BlockList({
               reorderEnabled={reorderEnabled}
               onRestoreGroup={onRestoreGroup}
               onRenameGroup={onRenameGroup}
+              onDeleteGroup={onDeleteGroup}
               rowActions={rowActions}
               activeDrop={activeDrop}
               dropGapPx={dropGapPx}
@@ -534,6 +538,7 @@ type GroupSectionProps = {
   reorderEnabled: boolean;
   onRestoreGroup: (groupId: number) => void;
   onRenameGroup: (groupUid: string, title: string) => void;
+  onDeleteGroup: (groupUid: string) => void;
   rowActions: TabRowActions;
   activeDrop: ActiveDrop | null;
   dropGapPx: number;
@@ -546,6 +551,7 @@ function GroupSection({
   reorderEnabled,
   onRestoreGroup,
   onRenameGroup,
+  onDeleteGroup,
   rowActions,
   activeDrop,
   dropGapPx,
@@ -645,14 +651,19 @@ function GroupSection({
             </h3>
           )}
         </div>
-        <button
-          className="ghost-button"
-          type="button"
-          onClick={() => onRestoreGroup(group.id)}
-          disabled={!hasTabs}
-        >
-          グループを復元
-        </button>
+        <div className="manager__group-actions">
+          <button
+            className="ghost-button"
+            type="button"
+            onClick={() => onRestoreGroup(group.id)}
+            disabled={!hasTabs}
+          >
+            グループを復元
+          </button>
+          <button className="ghost-button" type="button" onClick={() => onDeleteGroup(group.uid)}>
+            グループを削除
+          </button>
+        </div>
       </div>
       <TabList
         tabs={tabs}
@@ -678,6 +689,7 @@ type SetCardProps = {
   onRenameSet: (title: string) => void;
   onRestoreGroup: (groupId: number) => void;
   onRenameGroup: (groupUid: string, title: string) => void;
+  onDeleteGroup: (groupUid: string) => void;
   onCreateGroup: () => void;
   rowActions: TabRowActions;
   activeDrop: ActiveDrop | null;
@@ -695,6 +707,7 @@ function SetCard({
   onRenameSet,
   onRestoreGroup,
   onRenameGroup,
+  onDeleteGroup,
   onCreateGroup,
   rowActions,
   activeDrop,
@@ -839,6 +852,7 @@ function SetCard({
             reorderEnabled={reorderEnabled}
             onRestoreGroup={onRestoreGroup}
             onRenameGroup={onRenameGroup}
+            onDeleteGroup={onDeleteGroup}
             rowActions={rowActions}
             activeDrop={activeDrop}
             dropGapPx={dropGapPx}
@@ -1450,6 +1464,16 @@ export function ManagerApp() {
     await refreshState(updated.historySets);
   };
 
+  const handleDeleteGroup = async (setId: string, groupUid: string) => {
+    const updated = await updateState((current) => ({
+      ...current,
+      historySets: current.historySets.map((set) =>
+        set.id === setId ? deleteGroupFromHistorySet(set, groupUid) : set,
+      ),
+    }));
+    await refreshState(updated.historySets);
+  };
+
   const handleRestoreSet = async (set: HistorySet) => {
     setActionMessage('タブを復元しています...');
     try {
@@ -1666,6 +1690,7 @@ export function ManagerApp() {
                       onRenameGroup={(groupUid, title) =>
                         handleRenameGroup(set.id, groupUid, title)
                       }
+                      onDeleteGroup={(groupUid) => handleDeleteGroup(set.id, groupUid)}
                       onCreateGroup={() => handleCreateGroup(set.id)}
                       rowActions={rowActions}
                       activeDrop={activeDrop}

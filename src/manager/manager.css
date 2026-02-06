@@ -220,6 +220,12 @@ body {
   gap: 12px;
 }
 
+.manager__group-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .manager__group-label {
   font-size: 12px;
   color: #64748b;
