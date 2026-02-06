@@ -97,14 +97,27 @@ body {
   display: flex;
   align-items: center;
   gap: 6px;
+  padding: 3px 5px;
+  border-radius: 6px;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
   font-size: 11px;
   color: #0f172a;
+}
+
+.options__toggle:has(.options__toggle-input:checked) {
+  border-color: #c7d2fe;
+  background: #eef2ff;
 }
 
 .options__toggle-input {
   width: 13px;
   height: 13px;
   accent-color: #1e40af;
+}
+
+.options__toggle-label {
+  line-height: 1.25;
 }
 
 .options__actions {

@@ -22,6 +22,7 @@ import {
   normalizeManualHistorySetName,
 } from '../tab-manager/history';
 import { Button } from '../components/Button';
+import { ToggleButton } from '../components/ToggleButton';
 import {
   buildGroupFilterOptions,
   filterHistorySets,
@@ -43,6 +44,12 @@ import { cleanupHistorySet } from './restoreCleanup';
 import { shouldSuppressRestoreLoading } from './restorePolicy';
 import { resolveRestoreTarget } from './restoreTarget';
 import { removeSetsEmptiedSince } from './setCleanup';
+import {
+  getBindingStatusLabel,
+  resolveBindingStatus,
+  type BindingStatus,
+  type ManagerContext,
+} from './bindingState';
 import { createTabRowActions } from './tabRowActions';
 import type { DragItem, DropTarget } from './dragReorder';
 import { applyDragReorder } from './dragReorder';
@@ -358,22 +365,31 @@ function TabRow({
         {...listeners}
       />
       <div className="manager__tab-main">
-        <p className="manager__tab-title">{tab.title}</p>
+        <p className="manager__tab-title">
+          <span className="manager__title-with-lock">
+            <span>{tab.title}</span>
+            {locked ? (
+              <span className="manager__lock-indicator" aria-hidden="true">
+                🔒
+              </span>
+            ) : null}
+          </span>
+        </p>
         <p className="manager__tab-url">{tab.url}</p>
       </div>
       <div className="manager__tab-actions">
-        <Button
-          variant="ghost"
-          className={`manager__lock-button${locked ? ' manager__lock-button--active' : ''}`}
-          aria-label={locked ? 'タブのロックを解除する' : 'タブをロックする'}
-          onClick={(event) => {
+        <ToggleButton
+          pressed={locked}
+          onLabel="ロック解除"
+          offLabel="ロック"
+          ariaLabelOn="ロック解除"
+          ariaLabelOff="ロック"
+          onToggle={(event) => {
             event.stopPropagation();
             onToggleLock(tab);
           }}
           disabled={lockToggleDisabled}
-        >
-          {locked ? 'ロック解除' : 'ロック'}
-        </Button>
+        />
         <Button variant="ghost" onClick={rowActions.handleRemoveClick(tab)} disabled={locked}>
           削除
         </Button>
@@ -726,21 +742,28 @@ function GroupSection({
                   setIsEditing(true);
                 }}
               >
-                {group.title}
+                <span className="manager__title-with-lock">
+                  <span>{group.title}</span>
+                  {groupLocked ? (
+                    <span className="manager__lock-indicator" aria-hidden="true">
+                      🔒
+                    </span>
+                  ) : null}
+                </span>
               </button>
             </h3>
           )}
         </div>
         <div className="manager__group-actions">
-          <Button
-            variant="ghost"
-            className={`manager__lock-button${groupLocked ? ' manager__lock-button--active' : ''}`}
-            aria-label={groupLocked ? 'グループのロックを解除する' : 'グループをロックする'}
-            onClick={() => onToggleGroupLock(group.uid)}
+          <ToggleButton
+            pressed={groupLocked}
+            onLabel="ロック解除"
+            offLabel="ロック"
+            ariaLabelOn="ロック解除"
+            ariaLabelOff="ロック"
+            onToggle={() => onToggleGroupLock(group.uid)}
             disabled={set.locked}
-          >
-            {groupLocked ? 'ロック解除' : 'ロック'}
-          </Button>
+          />
           <Button variant="ghost" onClick={() => onRestoreGroup(group.id)} disabled={!hasTabs}>
             グループを復元
           </Button>
@@ -767,12 +790,15 @@ function GroupSection({
 type SetCardProps = {
   set: HistorySet;
   fullSet?: HistorySet;
+  bindingStatus: BindingStatus;
+  bindingToggleDisabled: boolean;
   reorderEnabled: boolean;
   shouldStartEditing: boolean;
   onStartEditingHandled: () => void;
   onRestoreSet: () => void;
   onDeleteSet: () => void;
   onToggleSetLock: () => void;
+  onToggleBinding: () => void;
   onRenameSet: (title: string) => void;
   onRestoreGroup: (groupId: number) => void;
   onRenameGroup: (groupUid: string, title: string) => void;
@@ -788,12 +814,15 @@ type SetCardProps = {
 function SetCard({
   set,
   fullSet,
+  bindingStatus,
+  bindingToggleDisabled,
   reorderEnabled,
   shouldStartEditing,
   onStartEditingHandled,
   onRestoreSet,
   onDeleteSet,
   onToggleSetLock,
+  onToggleBinding,
   onRenameSet,
   onRestoreGroup,
   onRenameGroup,
@@ -874,6 +903,9 @@ function SetCard({
 
   const layoutEntries = buildLayoutEntries(set);
   const shouldShowBlockList = reorderEnabled || layoutEntries.length > 0;
+  const bindingStatusLabel = getBindingStatusLabel(bindingStatus);
+  const showBindingIcon = bindingStatus !== 'unbound';
+  const isBoundCurrent = bindingStatus === 'bound-current';
 
   return (
     <article
@@ -913,22 +945,50 @@ function SetCard({
                     setIsEditing(true);
                   }}
                 >
-                  {set.name}
+                  <span className="manager__title-with-lock">
+                    <span>{set.name}</span>
+                    {set.locked ? (
+                      <span className="manager__lock-indicator" aria-hidden="true">
+                        🔒
+                      </span>
+                    ) : null}
+                  </span>
                 </button>
               )}
             </h2>
-            <p className="manager__card-meta">{tabSummary}</p>
+            <div className="manager__card-subline">
+              <p className="manager__card-meta">{tabSummary}</p>
+              {showBindingIcon ? (
+                <span
+                  className="manager__binding-status"
+                  title={bindingStatusLabel}
+                  role="img"
+                  aria-label={bindingStatusLabel}
+                >
+                  🔗
+                </span>
+              ) : null}
+            </div>
           </div>
         </div>
         <div className="manager__card-actions">
-          <Button
-            variant="ghost"
-            className={`manager__lock-button${set.locked ? ' manager__lock-button--active' : ''}`}
-            aria-label={set.locked ? 'ウィンドウのロックを解除する' : 'ウィンドウをロックする'}
-            onClick={onToggleSetLock}
-          >
-            {set.locked ? 'ロック解除' : 'ロック'}
-          </Button>
+          <ToggleButton
+            pressed={set.locked}
+            onLabel="ロック解除"
+            offLabel="ロック"
+            ariaLabelOn="ロック解除"
+            ariaLabelOff="ロック"
+            onToggle={onToggleSetLock}
+          />
+          <ToggleButton
+            pressed={isBoundCurrent}
+            onLabel="リンク解除"
+            offLabel="管理画面リンク"
+            ariaLabelOn="リンク解除"
+            ariaLabelOff="管理画面リンク"
+            onToggle={onToggleBinding}
+            disabled={bindingToggleDisabled}
+          />
           <Button variant="primary" onClick={onRestoreSet}>
             すべて復元
           </Button>
@@ -1261,6 +1321,7 @@ export function ManagerApp() {
   const [query, setQuery] = useState('');
   const [groupFilter, setGroupFilter] = useState(GROUP_FILTER_ALL);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [currentManagerContext, setCurrentManagerContext] = useState<ManagerContext | null>(null);
   const [activeDrag, setActiveDrag] = useState<DragData | null>(null);
   const [activeDrop, setActiveDrop] = useState<ActiveDrop | null>(null);
   const [dropGapPx, setDropGapPx] = useState(DEFAULT_DROP_GAP_PX);
@@ -1313,6 +1374,28 @@ export function ManagerApp() {
     return () => {
       cancelled = true;
       chrome.storage.onChanged.removeListener(handleChange);
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadManagerContext() {
+      try {
+        const context = await getCurrentManagerContext();
+        if (!cancelled) {
+          setCurrentManagerContext(context);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          console.error('Failed to get current manager context', err);
+          setCurrentManagerContext(null);
+          setActionMessage('現在の管理画面情報を取得できませんでした。');
+        }
+      }
+    }
+    void loadManagerContext();
+    return () => {
+      cancelled = true;
     };
   }, []);
 
@@ -1392,6 +1475,19 @@ export function ManagerApp() {
       restoreLoadingSuppressionEnabled: current.restoreLoadingSuppressionEnabled ?? true,
       removeRestoredTabsEnabled: current.removeRestoredTabsEnabled ?? true,
     }));
+  };
+
+  const refreshCurrentManagerContext = async () => {
+    try {
+      const context = await getCurrentManagerContext();
+      setCurrentManagerContext(context);
+      return context;
+    } catch (err) {
+      console.error('Failed to refresh manager context', err);
+      setCurrentManagerContext(null);
+      setActionMessage('現在の管理画面情報を取得できませんでした。');
+      return null;
+    }
   };
 
   const lockBodyScroll = () => {
@@ -1582,6 +1678,48 @@ export function ManagerApp() {
       }),
     }));
     await refreshState(updated.historySets);
+  };
+
+  const handleToggleManagerBinding = async (setId: string) => {
+    const context = await refreshCurrentManagerContext();
+    if (!context) {
+      return;
+    }
+    const updated = await updateState((current) => ({
+      ...current,
+      historySets: current.historySets.map((set) => {
+        if (set.id !== setId) {
+          return set;
+        }
+        const status = resolveBindingStatus(set.managerBinding, context);
+        if (status === 'bound-current') {
+          return {
+            ...set,
+            managerBinding: null,
+          };
+        }
+        return {
+          ...set,
+          managerBinding: {
+            managerTabId: context.tabId,
+            managerWindowId: context.windowId,
+          },
+        };
+      }),
+    }));
+    await refreshState(updated.historySets);
+    const target = updated.historySets.find((set) => set.id === setId);
+    if (!target) {
+      return;
+    }
+    const nextStatus = resolveBindingStatus(target.managerBinding, context);
+    setActionMessage(
+      nextStatus === 'bound-current'
+        ? 'この管理画面に接続しました。'
+        : nextStatus === 'unbound'
+          ? '接続を解除しました。'
+          : null,
+    );
   };
 
   const handleDeleteTab = async (setId: string, tabToDelete: TabSnapshot) => {
@@ -1947,6 +2085,11 @@ export function ManagerApp() {
               />
               {visibleSets.map((set, setIndex) => {
                 const fullSet = fullSets.find((item) => item.id === set.id);
+                const bindingStatus = resolveBindingStatus(
+                  set.managerBinding,
+                  currentManagerContext,
+                );
+                const bindingToggleDisabled = currentManagerContext === null;
                 const rowActions = createTabRowActions<TabSnapshot>({
                   onOpen: (tab) => handleRestoreTab(set.id, tab),
                   onRemove: (tab) => handleDeleteTab(set.id, tab),
@@ -1963,6 +2106,8 @@ export function ManagerApp() {
                     <SetCard
                       set={set}
                       fullSet={fullSet}
+                      bindingStatus={bindingStatus}
+                      bindingToggleDisabled={bindingToggleDisabled}
                       reorderEnabled={reorderEnabled}
                       shouldStartEditing={editingSetId === set.id}
                       onStartEditingHandled={() => {
@@ -1973,6 +2118,7 @@ export function ManagerApp() {
                       onRestoreSet={() => handleRestoreSet(set)}
                       onDeleteSet={() => handleDeleteSet(set.id)}
                       onToggleSetLock={() => handleToggleSetLock(set.id)}
+                      onToggleBinding={() => handleToggleManagerBinding(set.id)}
                       onRenameSet={(title) => handleRenameSet(set.id, title)}
                       onRestoreGroup={(groupId) => handleRestoreGroup(set, groupId)}
                       onRenameGroup={(groupUid, title) =>

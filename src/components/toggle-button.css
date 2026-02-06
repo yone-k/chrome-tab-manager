@@ -1,0 +1,13 @@
+.toggle-button {
+  min-width: 0;
+  padding-inline: 4px;
+}
+
+.toggle-button--pressed {
+  background: #c7d2fe;
+  color: #312e81;
+}
+
+.toggle-button--pressed:hover {
+  background: #a5b4fc;
+}

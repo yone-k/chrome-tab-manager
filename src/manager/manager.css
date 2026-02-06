@@ -130,6 +130,18 @@ body {
   font-size: 14px;
 }
 
+.manager__title-with-lock {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  min-width: 0;
+}
+
+.manager__lock-indicator {
+  font-size: 11px;
+  line-height: 1;
+}
+
 .manager__card-title-button {
   border: none;
   background: none;
@@ -156,6 +168,24 @@ body {
   margin: 0;
   font-size: 10px;
   color: #64748b;
+}
+
+.manager__card-subline {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.manager__binding-status {
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  width: 14px;
+  height: 14px;
+  font-size: 12px;
+  line-height: 1;
+  cursor: help;
 }
 
 .manager__card-actions {
@@ -401,20 +431,6 @@ body {
 
 .manager__error {
   color: #b91c1c;
-}
-
-.manager__lock-button {
-  min-width: 0;
-  padding-inline: 4px;
-}
-
-.manager__lock-button--active {
-  background: #c7d2fe;
-  color: #312e81;
-}
-
-.manager__lock-button--active:hover {
-  background: #a5b4fc;
 }
 
 .manager__options-link {
