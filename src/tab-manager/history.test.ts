@@ -6,6 +6,7 @@ describe('buildHistorySet', () => {
   it('タブ順序を保ち、参照されているグループのみを残す', () => {
     const result = buildHistorySet({
       id: 'set-1',
+      name: 'window-1',
       createdAt: 1700000000000,
       windowId: 5,
       tabs: [
@@ -23,11 +24,26 @@ describe('buildHistorySet', () => {
     expect(result.tabs.map((tab) => tab.title)).toEqual(['B', 'A', 'C']);
     expect(result.tabs[0].groupId).toBeNull();
     expect(result.groups.map((group) => group.id)).toEqual([1, 2]);
+    expect(result.layout.map((item) => item.type)).toEqual(['tab', 'group', 'group']);
     expect(result).toMatchObject({
       id: 'set-1',
+      name: 'window-1',
       createdAt: 1700000000000,
       windowId: 5,
     });
+  });
+
+  it('名前が空文字の場合は既定名へフォールバックする', () => {
+    const result = buildHistorySet({
+      id: 'set-2',
+      name: '   ',
+      createdAt: 1700000000000,
+      windowId: 5,
+      tabs: [],
+      groups: [],
+    });
+
+    expect(result.name).toBe('新規ウィンドウ');
   });
 });
 

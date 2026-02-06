@@ -1,5 +1,7 @@
 import { DEFAULT_EXCLUSIONS, normalizeExclusions } from './exclusions';
+import { formatHistorySetNameFromCreatedAt, normalizeManualHistorySetName } from './history';
 import type { HistorySet, TabManagerState } from './types';
+import { normalizeLayout } from './layout';
 import { createUid } from './uid';
 
 export const STATE_KEY = 'tabManagerState';
@@ -68,6 +70,11 @@ function normalizeHistorySets(rawSets: unknown): HistorySet[] {
       }
       const groups = Array.isArray(raw.groups) ? raw.groups : [];
       const tabs = Array.isArray(raw.tabs) ? raw.tabs : [];
+      const createdAt = typeof raw.createdAt === 'number' ? raw.createdAt : Date.now();
+      const normalizedName =
+        typeof raw.name === 'string'
+          ? normalizeManualHistorySetName(raw.name)
+          : formatHistorySetNameFromCreatedAt(createdAt);
       const normalizedGroups = groups.filter(isRecord).map((group) => ({
         uid: typeof group.uid === 'string' ? group.uid : createUid('group'),
         id: typeof group.id === 'number' ? group.id : 0,
@@ -84,10 +91,12 @@ function normalizeHistorySets(rawSets: unknown): HistorySet[] {
       }));
       const normalizedSet: HistorySet = {
         id: typeof raw.id === 'string' ? raw.id : createUid('set'),
-        createdAt: typeof raw.createdAt === 'number' ? raw.createdAt : Date.now(),
+        name: normalizedName,
+        createdAt,
         windowId: typeof raw.windowId === 'number' ? raw.windowId : 0,
         groups: normalizedGroups,
         tabs: normalizedTabs,
+        layout: normalizeLayout(raw.layout, normalizedGroups, normalizedTabs),
       };
       return normalizedSet;
     })

@@ -1,4 +1,5 @@
-import type { GroupSnapshot, HistorySet, TabSnapshot } from '../tab-manager/types';
+import type { GroupSnapshot, HistorySet, LayoutItem, TabSnapshot } from '../tab-manager/types';
+import { normalizeLayout } from '../tab-manager/layout';
 
 export type DragItem =
   | { type: 'set'; setId: string }
@@ -7,14 +8,18 @@ export type DragItem =
 
 export type DropTarget =
   | { type: 'set-list'; index: number }
-  | { type: 'group-list'; setId: string; index: number }
-  | { type: 'tab-list'; setId: string; groupUid: string | null; index: number };
+  | { type: 'block-list'; setId: string; index: number }
+  | { type: 'tab-list'; setId: string; groupUid: string; index: number };
 
 type SetView = {
   set: HistorySet;
   groups: GroupSnapshot[];
+  layout: LayoutItem[];
   tabsByGroupUid: Map<string, TabSnapshot[]>;
-  ungroupedTabs: TabSnapshot[];
+  ungroupedTabsByUid: Map<string, TabSnapshot>;
+  groupById: Map<number, GroupSnapshot>;
+  groupByUid: Map<string, GroupSnapshot>;
+  tabByUid: Map<string, TabSnapshot>;
 };
 
 function clampIndex(index: number, length: number) {
@@ -31,20 +36,33 @@ function arrayMove<T>(items: T[], fromIndex: number, toIndex: number) {
   return next;
 }
 
+function moveLayoutItem(layout: LayoutItem[], fromIndex: number, toIndex: number) {
+  const insertIndex = clampIndex(toIndex, layout.length);
+  if (fromIndex === insertIndex || fromIndex + 1 === insertIndex) {
+    return layout;
+  }
+  const adjustedIndex = insertIndex > fromIndex ? insertIndex - 1 : insertIndex;
+  return arrayMove(layout, fromIndex, adjustedIndex);
+}
+
 function buildSetView(set: HistorySet): SetView {
   const groups = [...set.groups];
   const groupById = new Map(groups.map((group) => [group.id, group]));
+  const groupByUid = new Map(groups.map((group) => [group.uid, group]));
+  const sortedTabs = [...set.tabs].sort((a, b) => a.index - b.index);
   const tabsByGroupUid = new Map<string, TabSnapshot[]>();
-  const ungroupedTabs: TabSnapshot[] = [];
+  const ungroupedTabsByUid = new Map<string, TabSnapshot>();
+  const tabByUid = new Map<string, TabSnapshot>();
 
-  for (const tab of set.tabs) {
+  for (const tab of sortedTabs) {
+    tabByUid.set(tab.uid, tab);
     if (tab.groupId === null) {
-      ungroupedTabs.push(tab);
+      ungroupedTabsByUid.set(tab.uid, tab);
       continue;
     }
     const group = groupById.get(tab.groupId);
     if (!group) {
-      ungroupedTabs.push({ ...tab, groupId: null });
+      ungroupedTabsByUid.set(tab.uid, { ...tab, groupId: null });
       continue;
     }
     const list = tabsByGroupUid.get(group.uid) ?? [];
@@ -52,29 +70,54 @@ function buildSetView(set: HistorySet): SetView {
     tabsByGroupUid.set(group.uid, list);
   }
 
-  return { set, groups, tabsByGroupUid, ungroupedTabs };
+  const layout = normalizeLayout(set.layout, groups, sortedTabs);
+
+  return {
+    set,
+    groups,
+    layout,
+    tabsByGroupUid,
+    ungroupedTabsByUid,
+    groupById,
+    groupByUid,
+    tabByUid,
+  };
 }
 
 function materializeSet(view: SetView): HistorySet {
-  const groupsWithTabs = view.groups.filter((group) => {
-    const list = view.tabsByGroupUid.get(group.uid) ?? [];
-    return list.length > 0;
-  });
-
-  const normalizedGroups = groupsWithTabs.map((group, index) => ({
-    ...group,
-    index,
-  }));
-
+  const groupByUid = new Map(view.groups.map((group) => [group.uid, group]));
+  const groupById = new Map(view.groups.map((group) => [group.id, group]));
   const orderedTabs: TabSnapshot[] = [];
-  for (const group of normalizedGroups) {
-    const list = view.tabsByGroupUid.get(group.uid) ?? [];
-    for (const tab of list) {
-      orderedTabs.push({ ...tab, groupId: group.id });
+  const seenTabUid = new Set<string>();
+
+  for (const item of view.layout) {
+    if (item.type === 'group') {
+      const group = groupByUid.get(item.uid);
+      if (!group) {
+        continue;
+      }
+      const list = view.tabsByGroupUid.get(group.uid) ?? [];
+      for (const tab of list) {
+        orderedTabs.push({ ...tab, groupId: group.id });
+        seenTabUid.add(tab.uid);
+      }
+      continue;
     }
-  }
-  for (const tab of view.ungroupedTabs) {
+    const tab = view.ungroupedTabsByUid.get(item.uid);
+    if (!tab) {
+      continue;
+    }
     orderedTabs.push({ ...tab, groupId: null });
+    seenTabUid.add(tab.uid);
+  }
+
+  for (const tab of view.tabByUid.values()) {
+    if (seenTabUid.has(tab.uid)) {
+      continue;
+    }
+    const group = tab.groupId !== null ? groupById.get(tab.groupId) : null;
+    orderedTabs.push({ ...tab, groupId: group ? group.id : null });
+    seenTabUid.add(tab.uid);
   }
 
   const normalizedTabs = orderedTabs.map((tab, index) => ({
@@ -82,10 +125,24 @@ function materializeSet(view: SetView): HistorySet {
     index,
   }));
 
+  const groupIndexById = new Map<number, number>();
+  for (const tab of normalizedTabs) {
+    if (tab.groupId === null || groupIndexById.has(tab.groupId)) {
+      continue;
+    }
+    groupIndexById.set(tab.groupId, tab.index);
+  }
+
+  const normalizedGroups = view.groups.map((group) => ({
+    ...group,
+    index: groupIndexById.get(group.id) ?? group.index,
+  }));
+
   return {
     ...view.set,
     groups: normalizedGroups,
     tabs: normalizedTabs,
+    layout: normalizeLayout(view.layout, normalizedGroups, normalizedTabs),
   };
 }
 
@@ -103,13 +160,6 @@ function nextGroupId(target: HistorySet) {
     return 1;
   }
   return Math.max(...existing) + 1;
-}
-
-function resolveTargetGroup(target: HistorySet, groupUid: string | null): GroupSnapshot | null {
-  if (groupUid === null) {
-    return null;
-  }
-  return findGroupByUid(target, groupUid) ?? null;
 }
 
 function updateGroupIdIfConflict(target: HistorySet, group: GroupSnapshot, tabs: TabSnapshot[]) {
@@ -142,7 +192,7 @@ export function applyDragReorder(
     return arrayMove(historySets, fromIndex, adjustedIndex);
   }
 
-  if (active.type === 'group' && target.type === 'group-list') {
+  if (active.type === 'group' && target.type === 'block-list') {
     const sourceIndex = historySets.findIndex((set) => set.id === active.setId);
     const targetIndex = historySets.findIndex((set) => set.id === target.setId);
     if (sourceIndex === -1 || targetIndex === -1) {
@@ -157,43 +207,127 @@ export function applyDragReorder(
 
     const sourceView = buildSetView(source);
     const targetView = sourceIndex === targetIndex ? sourceView : buildSetView(targetSet);
-
-    const groupList = sourceView.groups.filter((item) => item.uid !== group.uid);
-    const movedTabs = sourceView.tabsByGroupUid.get(group.uid) ?? [];
+    const sourceLayoutIndex = sourceView.layout.findIndex(
+      (item) => item.type === 'group' && item.uid === group.uid,
+    );
+    if (sourceLayoutIndex === -1) {
+      return historySets;
+    }
 
     if (sourceIndex === targetIndex) {
-      const originalIndex = sourceView.groups.findIndex((item) => item.uid === group.uid);
-      const insertIndex = clampIndex(target.index, sourceView.groups.length);
-      if (originalIndex === insertIndex || originalIndex + 1 === insertIndex) {
+      const reorderedLayout = moveLayoutItem(sourceView.layout, sourceLayoutIndex, target.index);
+      if (reorderedLayout === sourceView.layout) {
         return historySets;
       }
-      const adjustedIndex = insertIndex > originalIndex ? insertIndex - 1 : insertIndex;
-      const reordered = arrayMove(sourceView.groups, originalIndex, adjustedIndex);
-      const updated = materializeSet({
-        ...sourceView,
-        groups: reordered,
-      });
       const next = [...historySets];
-      next[sourceIndex] = updated;
+      next[sourceIndex] = materializeSet({ ...sourceView, layout: reorderedLayout });
       return next;
     }
 
+    const movedTabs = sourceView.tabsByGroupUid.get(group.uid) ?? [];
     const { group: movedGroup, tabs: movedGroupTabs } = updateGroupIdIfConflict(
       targetSet,
       group,
       movedTabs,
     );
-    const targetGroups = [...targetView.groups];
-    const insertIndex = clampIndex(target.index, targetGroups.length);
-    targetGroups.splice(insertIndex, 0, movedGroup);
-    targetView.tabsByGroupUid.set(movedGroup.uid, movedGroupTabs);
 
-    sourceView.groups = groupList;
+    sourceView.layout = sourceView.layout.filter(
+      (item) => !(item.type === 'group' && item.uid === group.uid),
+    );
+    sourceView.groups = sourceView.groups.filter((item) => item.uid !== group.uid);
+    sourceView.groupByUid.delete(group.uid);
+    sourceView.groupById.delete(group.id);
     sourceView.tabsByGroupUid.delete(group.uid);
+    for (const tab of movedTabs) {
+      sourceView.tabByUid.delete(tab.uid);
+    }
+
+    targetView.groups = [...targetView.groups, movedGroup];
+    targetView.groupByUid.set(movedGroup.uid, movedGroup);
+    targetView.groupById.set(movedGroup.id, movedGroup);
+    targetView.tabsByGroupUid.set(movedGroup.uid, movedGroupTabs);
+    for (const tab of movedGroupTabs) {
+      targetView.tabByUid.set(tab.uid, tab);
+    }
+    const targetLayout = [...targetView.layout];
+    targetLayout.splice(clampIndex(target.index, targetLayout.length), 0, {
+      type: 'group',
+      uid: movedGroup.uid,
+    });
+    targetView.layout = targetLayout;
 
     const next = [...historySets];
     next[sourceIndex] = materializeSet(sourceView);
-    next[targetIndex] = materializeSet({ ...targetView, groups: targetGroups });
+    next[targetIndex] = materializeSet(targetView);
+    return next;
+  }
+
+  if (active.type === 'tab' && target.type === 'block-list') {
+    const sourceIndex = historySets.findIndex((set) => set.id === active.setId);
+    const targetIndex = historySets.findIndex((set) => set.id === target.setId);
+    if (sourceIndex === -1 || targetIndex === -1) {
+      return historySets;
+    }
+    const source = historySets[sourceIndex];
+    const targetSet = historySets[targetIndex];
+    const tab = findTabByUid(source, active.tabUid);
+    if (!tab) {
+      return historySets;
+    }
+
+    const sourceView = buildSetView(source);
+    const targetView = sourceIndex === targetIndex ? sourceView : buildSetView(targetSet);
+    const sourceGroup =
+      tab.groupId !== null ? (sourceView.groupById.get(tab.groupId) ?? null) : null;
+    const sourceLayoutIndex = sourceView.layout.findIndex(
+      (item) => item.type === 'tab' && item.uid === tab.uid,
+    );
+
+    if (sourceIndex === targetIndex && !sourceGroup && sourceLayoutIndex !== -1) {
+      const reorderedLayout = moveLayoutItem(sourceView.layout, sourceLayoutIndex, target.index);
+      if (reorderedLayout === sourceView.layout) {
+        return historySets;
+      }
+      const next = [...historySets];
+      next[sourceIndex] = materializeSet({ ...sourceView, layout: reorderedLayout });
+      return next;
+    }
+
+    if (sourceGroup) {
+      const sourceList = sourceView.tabsByGroupUid.get(sourceGroup.uid) ?? [];
+      const sourceTabIndex = sourceList.findIndex((item) => item.uid === tab.uid);
+      if (sourceTabIndex === -1) {
+        return historySets;
+      }
+      sourceList.splice(sourceTabIndex, 1);
+      sourceView.tabsByGroupUid.set(sourceGroup.uid, sourceList);
+    } else if (sourceLayoutIndex !== -1) {
+      sourceView.layout = sourceView.layout.filter((_, index) => index !== sourceLayoutIndex);
+      sourceView.ungroupedTabsByUid.delete(tab.uid);
+    }
+
+    if (sourceIndex !== targetIndex) {
+      sourceView.tabByUid.delete(tab.uid);
+    }
+
+    const updatedTab: TabSnapshot = { ...tab, groupId: null };
+    targetView.ungroupedTabsByUid.set(updatedTab.uid, updatedTab);
+    if (sourceIndex !== targetIndex) {
+      targetView.tabByUid.set(updatedTab.uid, updatedTab);
+    }
+
+    const targetLayout = [...targetView.layout];
+    targetLayout.splice(clampIndex(target.index, targetLayout.length), 0, {
+      type: 'tab',
+      uid: updatedTab.uid,
+    });
+    targetView.layout = targetLayout;
+
+    const next = [...historySets];
+    next[sourceIndex] = materializeSet(sourceView);
+    if (sourceIndex !== targetIndex) {
+      next[targetIndex] = materializeSet(targetView);
+    }
     return next;
   }
 
@@ -214,62 +348,60 @@ export function applyDragReorder(
     const targetView = sourceIndex === targetIndex ? sourceView : buildSetView(targetSet);
 
     const sourceGroup =
-      tab.groupId !== null ? source.groups.find((g) => g.id === tab.groupId) : null;
-    const sourceList = sourceGroup?.uid
-      ? (sourceView.tabsByGroupUid.get(sourceGroup.uid) ?? [])
-      : sourceView.ungroupedTabs;
-    const sourceTabIndex = sourceList.findIndex((item) => item.uid === tab.uid);
-    if (sourceTabIndex === -1) {
+      tab.groupId !== null ? (sourceView.groupById.get(tab.groupId) ?? null) : null;
+    const sourceList = sourceGroup ? (sourceView.tabsByGroupUid.get(sourceGroup.uid) ?? []) : null;
+    const sourceTabIndex = sourceList ? sourceList.findIndex((item) => item.uid === tab.uid) : -1;
+
+    const targetGroup = targetView.groupByUid.get(target.groupUid);
+    if (!targetGroup) {
       return historySets;
     }
-
-    const targetGroup = resolveTargetGroup(targetSet, target.groupUid);
-    const targetList = targetGroup?.uid
-      ? (targetView.tabsByGroupUid.get(targetGroup.uid) ?? [])
-      : targetView.ungroupedTabs;
-
+    const targetList = targetView.tabsByGroupUid.get(targetGroup.uid) ?? [];
     const toIndex = clampIndex(target.index, targetList.length);
-    const updatedTab: TabSnapshot = {
-      ...tab,
-      groupId: targetGroup ? targetGroup.id : null,
-    };
+    const updatedTab: TabSnapshot = { ...tab, groupId: targetGroup.id };
 
-    if (sourceIndex === targetIndex && sourceList === targetList) {
+    if (sourceIndex === targetIndex && sourceGroup?.uid === targetGroup.uid) {
+      if (sourceTabIndex === -1) {
+        return historySets;
+      }
       if (sourceTabIndex === toIndex || sourceTabIndex + 1 === toIndex) {
         return historySets;
       }
       const reordered = arrayMove(
-        sourceList,
+        sourceList ?? [],
         sourceTabIndex,
         toIndex > sourceTabIndex ? toIndex - 1 : toIndex,
       );
-      if (sourceGroup?.uid) {
-        sourceView.tabsByGroupUid.set(sourceGroup.uid, reordered);
-      } else {
-        sourceView.ungroupedTabs = reordered;
-      }
+      targetView.tabsByGroupUid.set(targetGroup.uid, reordered);
       const next = [...historySets];
-      next[sourceIndex] = materializeSet(sourceView);
+      next[sourceIndex] = materializeSet(targetView);
       return next;
     }
 
-    sourceList.splice(sourceTabIndex, 1);
-    targetList.splice(toIndex, 0, updatedTab);
-
-    if (sourceGroup?.uid) {
+    if (sourceGroup && sourceList) {
+      if (sourceTabIndex === -1) {
+        return historySets;
+      }
+      sourceList.splice(sourceTabIndex, 1);
       sourceView.tabsByGroupUid.set(sourceGroup.uid, sourceList);
     } else {
-      sourceView.ungroupedTabs = sourceList;
-    }
-    if (targetGroup?.uid) {
-      targetView.tabsByGroupUid.set(targetGroup.uid, targetList);
-    } else {
-      targetView.ungroupedTabs = targetList;
+      const sourceLayoutIndex = sourceView.layout.findIndex(
+        (item) => item.type === 'tab' && item.uid === tab.uid,
+      );
+      if (sourceLayoutIndex !== -1) {
+        sourceView.layout = sourceView.layout.filter((_, index) => index !== sourceLayoutIndex);
+      }
+      sourceView.ungroupedTabsByUid.delete(tab.uid);
     }
 
-    if (sourceGroup?.uid && sourceList.length === 0) {
-      sourceView.groups = sourceView.groups.filter((group) => group.uid !== sourceGroup.uid);
-      sourceView.tabsByGroupUid.delete(sourceGroup.uid);
+    if (sourceIndex !== targetIndex) {
+      sourceView.tabByUid.delete(tab.uid);
+    }
+
+    targetList.splice(toIndex, 0, updatedTab);
+    targetView.tabsByGroupUid.set(targetGroup.uid, targetList);
+    if (sourceIndex !== targetIndex) {
+      targetView.tabByUid.set(updatedTab.uid, updatedTab);
     }
 
     const next = [...historySets];

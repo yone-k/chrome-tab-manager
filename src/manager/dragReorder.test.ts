@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { GroupSnapshot, HistorySet, TabSnapshot } from '../tab-manager/types';
+import { buildLayoutFromData } from '../tab-manager/layout';
 import { applyDragReorder } from './dragReorder';
 
 type SetInput = {
@@ -10,18 +11,22 @@ type SetInput = {
 };
 
 function makeSet(input: SetInput): HistorySet {
+  const groups = input.groups.map((group, index) => ({
+    ...group,
+    index,
+  }));
+  const tabs = input.tabs.map((tab, index) => ({
+    ...tab,
+    index,
+  }));
   return {
     id: input.id,
+    name: input.id,
     createdAt: 1700000000000,
     windowId: 1,
-    groups: input.groups.map((group, index) => ({
-      ...group,
-      index,
-    })),
-    tabs: input.tabs.map((tab, index) => ({
-      ...tab,
-      index,
-    })),
+    groups,
+    tabs,
+    layout: buildLayoutFromData(groups, tabs),
   };
 }
 
@@ -29,8 +34,14 @@ function expectSequentialIndexes(tabs: TabSnapshot[]) {
   expect(tabs.map((tab) => tab.index)).toEqual(tabs.map((_, index) => index));
 }
 
-function expectSequentialGroupIndexes(groups: GroupSnapshot[]) {
-  expect(groups.map((group) => group.index)).toEqual(groups.map((_, index) => index));
+function expectGroupIndexesMatchTabs(set: HistorySet) {
+  for (const group of set.groups) {
+    const indexes = set.tabs.filter((tab) => tab.groupId === group.id).map((tab) => tab.index);
+    if (indexes.length === 0) {
+      continue;
+    }
+    expect(group.index).toBe(Math.min(...indexes));
+  }
 }
 
 describe('applyDragReorder', () => {
@@ -65,7 +76,7 @@ describe('applyDragReorder', () => {
     const result = applyDragReorder(
       [setA, setB],
       { type: 'group', setId: 'set-a', groupUid: 'g-a' },
-      { type: 'group-list', setId: 'set-b', index: 1 },
+      { type: 'block-list', setId: 'set-b', index: 1 },
     );
 
     const target = result.find((set) => set.id === 'set-b')!;
@@ -76,7 +87,7 @@ describe('applyDragReorder', () => {
     expect(target.tabs.filter((tab) => tab.uid === 't-a').length).toBe(1);
     expect(target.tabs.find((tab) => tab.uid === 't-a')?.groupId).toBe(movedGroup.id);
     expectSequentialIndexes(target.tabs);
-    expectSequentialGroupIndexes(target.groups);
+    expectGroupIndexesMatchTabs(target);
   });
 
   it('タブを別セッションのグループへ移動する', () => {
@@ -100,13 +111,13 @@ describe('applyDragReorder', () => {
     const source = result.find((set) => set.id === 'set-a')!;
     const target = result.find((set) => set.id === 'set-b')!;
 
-    expect(source.groups.length).toBe(0);
+    expect(source.groups.length).toBe(1);
     expect(target.tabs.map((tab) => tab.uid)).toEqual(['t-a', 't-b']);
     expect(target.tabs.find((tab) => tab.uid === 't-a')?.groupId).toBe(2);
     expectSequentialIndexes(target.tabs);
   });
 
-  it('タブを未グループへ移動すると空グループが削除される', () => {
+  it('タブを未グループへ移動しても空グループを維持する', () => {
     const set = makeSet({
       id: 'set-a',
       groups: [{ uid: 'g-a', id: 1, title: 'A', color: 'blue' }],
@@ -119,13 +130,18 @@ describe('applyDragReorder', () => {
     const result = applyDragReorder(
       [set],
       { type: 'tab', setId: 'set-a', tabUid: 't-a' },
-      { type: 'tab-list', setId: 'set-a', groupUid: null, index: 1 },
+      { type: 'block-list', setId: 'set-a', index: 2 },
     );
 
     const updated = result[0];
-    expect(updated.groups.length).toBe(0);
+    expect(updated.groups.length).toBe(1);
     expect(updated.tabs.map((tab) => tab.uid)).toEqual(['t-b', 't-a']);
     expect(updated.tabs.find((tab) => tab.uid === 't-a')?.groupId).toBeNull();
     expectSequentialIndexes(updated.tabs);
+    expect(updated.layout.map((item) => `${item.type}:${item.uid}`)).toEqual([
+      'group:g-a',
+      'tab:t-b',
+      'tab:t-a',
+    ]);
   });
 });

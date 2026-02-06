@@ -1,7 +1,11 @@
 import { useState } from 'react';
 
 import { filterSavableTabs, getTabUrl } from '../tab-manager/exclusions';
-import { buildHistorySet, createHistoryId } from '../tab-manager/history';
+import {
+  buildHistorySet,
+  createHistoryId,
+  formatHistorySetNameFromCreatedAt,
+} from '../tab-manager/history';
 import { getState, updateState } from '../tab-manager/storage';
 import type { GroupInput, TabInput } from '../tab-manager/history';
 import { getPopupTitle } from './title';
@@ -138,9 +142,11 @@ export function App() {
         title: group.title ?? '',
         color: group.color,
       }));
+      const createdAt = Date.now();
       const historySet = buildHistorySet({
         id: createHistoryId(),
-        createdAt: Date.now(),
+        name: formatHistorySetNameFromCreatedAt(createdAt),
+        createdAt,
         windowId,
         tabs: tabInputs,
         groups: groupInputs,

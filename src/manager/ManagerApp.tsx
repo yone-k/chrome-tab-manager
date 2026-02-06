@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, type KeyboardEvent, useEffect, useMemo, useRef, useState } from 'react';
 
 import {
   DndContext,
@@ -17,13 +17,20 @@ import {
 } from '@dnd-kit/core';
 
 import {
+  DEFAULT_NEW_WINDOW_NAME,
+  createHistoryId,
+  normalizeManualHistorySetName,
+} from '../tab-manager/history';
+import {
   buildGroupFilterOptions,
   filterHistorySets,
   GROUP_FILTER_ALL,
   GROUP_FILTER_UNGROUPED,
 } from '../tab-manager/filters';
+import { normalizeLayout } from '../tab-manager/layout';
 import { getState, STATE_KEY, updateState } from '../tab-manager/storage';
 import type { GroupSnapshot, HistorySet, TabSnapshot } from '../tab-manager/types';
+import { createUid } from '../tab-manager/uid';
 import { cleanupHistorySet } from './restoreCleanup';
 import { shouldSuppressRestoreLoading } from './restorePolicy';
 import { createTabRowActions } from './tabRowActions';
@@ -41,8 +48,8 @@ type DragData = {
 
 type DropItemData =
   | { type: 'set-zone'; index: number }
-  | { type: 'group-zone'; setId: string; index: number }
-  | { type: 'tab-zone'; setId: string; groupUid: string | null; index: number };
+  | { type: 'block-zone'; setId: string; index: number }
+  | { type: 'tab-zone'; setId: string; groupUid: string; index: number };
 
 type ActiveDrop = {
   dropItem: DropItemData;
@@ -51,7 +58,7 @@ type ActiveDrop = {
 };
 
 const SET_LIST_GAP_PX = 16;
-const GROUP_LIST_GAP_PX = 16;
+const BLOCK_LIST_GAP_PX = 16;
 const TAB_LIST_GAP_PX = 10;
 
 const collisionDetection: CollisionDetection = (args) => {
@@ -152,14 +159,18 @@ function OverlayGroupSection({ group, tabs }: { group: GroupSnapshot; tabs: TabS
   );
 }
 
+function OverlayUngroupedTabBlock({ tab }: { tab: TabSnapshot }) {
+  return (
+    <div className="manager__tab-list manager__tab-list--block">
+      <OverlayTabRow tab={tab} />
+    </div>
+  );
+}
+
 function OverlaySetCard({ set }: { set: HistorySet }) {
-  const groupedTabs = groupTabsById(set.tabs);
   const totalTabs = set.tabs.length;
   const tabSummary = `保存済みタブ: ${totalTabs}件`;
-  const groupEntries = set.groups
-    .map((group) => ({ group, tabs: groupedTabs.get(group.id) ?? [] }))
-    .filter((entry) => entry.tabs.length > 0);
-  const ungroupedTabs = groupedTabs.get(null) ?? [];
+  const layoutEntries = buildLayoutEntries(set);
 
   return (
     <article className="manager__card manager__card--overlay">
@@ -167,7 +178,7 @@ function OverlaySetCard({ set }: { set: HistorySet }) {
         <div className="manager__card-header-main">
           <OverlayHandle />
           <div>
-            <h2 className="manager__card-title">{formatTimestamp(set.createdAt)}</h2>
+            <h2 className="manager__card-title">{set.name}</h2>
             <p className="manager__card-meta">{tabSummary}</p>
           </div>
         </div>
@@ -176,27 +187,18 @@ function OverlaySetCard({ set }: { set: HistorySet }) {
             すべて復元
           </button>
           <button className="ghost-button" type="button" disabled>
-            セットを削除
+            ウィンドウを削除
           </button>
         </div>
       </div>
 
-      {groupEntries.map((entry) => (
-        <OverlayGroupSection key={entry.group.uid} group={entry.group} tabs={entry.tabs} />
-      ))}
-
-      {ungroupedTabs.length > 0 ? (
-        <section className="manager__group manager__group--overlay">
-          <div className="manager__group-header">
-            <h3 className="manager__group-title">未グループ</h3>
-          </div>
-          <div className="manager__tab-list">
-            {ungroupedTabs.map((tab) => (
-              <OverlayTabRow key={tab.uid} tab={tab} />
-            ))}
-          </div>
-        </section>
-      ) : null}
+      {layoutEntries.map((entry) =>
+        entry.type === 'group' ? (
+          <OverlayGroupSection key={entry.group.uid} group={entry.group} tabs={entry.tabs} />
+        ) : (
+          <OverlayUngroupedTabBlock key={entry.tab.uid} tab={entry.tab} />
+        ),
+      )}
     </article>
   );
 }
@@ -232,15 +234,14 @@ function isDropItemData(value: unknown): value is DropItemData {
   if (value.type === 'set-zone') {
     return typeof value.index === 'number';
   }
-  if (value.type === 'group-zone') {
+  if (value.type === 'block-zone') {
     return typeof value.setId === 'string' && typeof value.index === 'number';
   }
   if (value.type === 'tab-zone') {
-    const groupUid = value.groupUid;
     return (
       typeof value.setId === 'string' &&
       typeof value.index === 'number' &&
-      (groupUid === null || typeof groupUid === 'string')
+      typeof value.groupUid === 'string'
     );
   }
   return false;
@@ -279,8 +280,8 @@ function buildDropTarget(dropItem: DropItemData): DropTarget {
   if (dropItem.type === 'set-zone') {
     return { type: 'set-list', index: dropItem.index };
   }
-  if (dropItem.type === 'group-zone') {
-    return { type: 'group-list', setId: dropItem.setId, index: dropItem.index };
+  if (dropItem.type === 'block-zone') {
+    return { type: 'block-list', setId: dropItem.setId, index: dropItem.index };
   }
   return {
     type: 'tab-list',
@@ -351,7 +352,7 @@ function TabRow({ tab, setId, reorderEnabled, rowActions }: TabRowProps) {
 type TabListProps = {
   tabs: TabSnapshot[];
   setId: string;
-  groupUid: string | null;
+  groupUid: string;
   reorderEnabled: boolean;
   rowActions: TabRowActions;
   activeDrop: ActiveDrop | null;
@@ -370,7 +371,7 @@ function TabList({
   return (
     <ul className="manager__tab-list">
       <DropZone
-        id={`zone:tab:${setId}:${groupUid ?? 'ungrouped'}:0`}
+        id={`zone:tab:${setId}:${groupUid}:0`}
         dropItem={{ type: 'tab-zone', setId, groupUid, index: 0 }}
         activeDrop={activeDrop}
         dropGapPx={dropGapPx}
@@ -381,7 +382,7 @@ function TabList({
         <Fragment key={tab.uid}>
           <TabRow tab={tab} setId={setId} reorderEnabled={reorderEnabled} rowActions={rowActions} />
           <DropZone
-            id={`zone:tab:${setId}:${groupUid ?? 'ungrouped'}:${index + 1}`}
+            id={`zone:tab:${setId}:${groupUid}:${index + 1}`}
             dropItem={{ type: 'tab-zone', setId, groupUid, index: index + 1 }}
             activeDrop={activeDrop}
             dropGapPx={dropGapPx}
@@ -394,58 +395,130 @@ function TabList({
   );
 }
 
-type GroupListEntry = {
-  group: GroupSnapshot;
-  tabs: TabSnapshot[];
-};
+type LayoutEntry =
+  | { type: 'group'; group: GroupSnapshot; tabs: TabSnapshot[] }
+  | { type: 'tab'; tab: TabSnapshot };
 
-type GroupListProps = {
-  entries: GroupListEntry[];
+function buildLayoutEntries(set: HistorySet): LayoutEntry[] {
+  const layout = normalizeLayout(set.layout, set.groups, set.tabs);
+  const groupByUid = new Map(set.groups.map((group) => [group.uid, group]));
+  const groupById = new Map(set.groups.map((group) => [group.id, group]));
+  const sortedTabs = [...set.tabs].sort((a, b) => a.index - b.index);
+  const tabsByGroupId = new Map<number, TabSnapshot[]>();
+  const tabByUid = new Map(sortedTabs.map((tab) => [tab.uid, tab]));
+
+  for (const tab of sortedTabs) {
+    if (tab.groupId === null) {
+      continue;
+    }
+    const group = groupById.get(tab.groupId);
+    if (!group) {
+      continue;
+    }
+    const list = tabsByGroupId.get(group.id) ?? [];
+    list.push(tab);
+    tabsByGroupId.set(group.id, list);
+  }
+
+  const entries: LayoutEntry[] = [];
+  for (const item of layout) {
+    if (item.type === 'group') {
+      const group = groupByUid.get(item.uid);
+      if (!group) {
+        continue;
+      }
+      entries.push({ type: 'group', group, tabs: tabsByGroupId.get(group.id) ?? [] });
+      continue;
+    }
+    const tab = tabByUid.get(item.uid);
+    if (!tab) {
+      continue;
+    }
+    const group = tab.groupId !== null ? groupById.get(tab.groupId) : null;
+    if (tab.groupId === null || !group) {
+      entries.push({ type: 'tab', tab });
+    }
+  }
+  return entries;
+}
+
+type BlockListProps = {
+  entries: LayoutEntry[];
   setId: string;
   reorderEnabled: boolean;
   onRestoreGroup: (groupId: number) => void;
+  onRenameGroup: (groupUid: string, title: string) => void;
   rowActions: TabRowActions;
   activeDrop: ActiveDrop | null;
   dropGapPx: number;
 };
 
-function GroupList({
+function UngroupedTabBlock({
+  tab,
+  setId,
+  reorderEnabled,
+  rowActions,
+}: {
+  tab: TabSnapshot;
+  setId: string;
+  reorderEnabled: boolean;
+  rowActions: TabRowActions;
+}) {
+  return (
+    <ul className="manager__tab-list manager__tab-list--block">
+      <TabRow tab={tab} setId={setId} reorderEnabled={reorderEnabled} rowActions={rowActions} />
+    </ul>
+  );
+}
+
+function BlockList({
   entries,
   setId,
   reorderEnabled,
   onRestoreGroup,
+  onRenameGroup,
   rowActions,
   activeDrop,
   dropGapPx,
-}: GroupListProps) {
+}: BlockListProps) {
   return (
-    <div className="manager__group-list">
+    <div className="manager__block-list">
       <DropZone
-        id={`zone:group:${setId}:0`}
-        dropItem={{ type: 'group-zone', setId, index: 0 }}
+        id={`zone:block:${setId}:0`}
+        dropItem={{ type: 'block-zone', setId, index: 0 }}
         activeDrop={activeDrop}
         dropGapPx={dropGapPx}
-        baseGapPx={GROUP_LIST_GAP_PX}
+        baseGapPx={BLOCK_LIST_GAP_PX}
         reorderEnabled={reorderEnabled}
       />
       {entries.map((entry, index) => (
-        <Fragment key={entry.group.uid}>
-          <GroupSection
-            setId={setId}
-            group={entry.group}
-            tabs={entry.tabs}
-            reorderEnabled={reorderEnabled}
-            onRestoreGroup={onRestoreGroup}
-            rowActions={rowActions}
-            activeDrop={activeDrop}
-            dropGapPx={dropGapPx}
-          />
+        <Fragment key={entry.type === 'group' ? entry.group.uid : entry.tab.uid}>
+          {entry.type === 'group' ? (
+            <GroupSection
+              setId={setId}
+              group={entry.group}
+              tabs={entry.tabs}
+              reorderEnabled={reorderEnabled}
+              onRestoreGroup={onRestoreGroup}
+              onRenameGroup={onRenameGroup}
+              rowActions={rowActions}
+              activeDrop={activeDrop}
+              dropGapPx={dropGapPx}
+            />
+          ) : (
+            <UngroupedTabBlock
+              tab={entry.tab}
+              setId={setId}
+              reorderEnabled={reorderEnabled}
+              rowActions={rowActions}
+            />
+          )}
           <DropZone
-            id={`zone:group:${setId}:${index + 1}`}
-            dropItem={{ type: 'group-zone', setId, index: index + 1 }}
+            id={`zone:block:${setId}:${index + 1}`}
+            dropItem={{ type: 'block-zone', setId, index: index + 1 }}
             activeDrop={activeDrop}
             dropGapPx={dropGapPx}
-            baseGapPx={GROUP_LIST_GAP_PX}
+            baseGapPx={BLOCK_LIST_GAP_PX}
             reorderEnabled={reorderEnabled}
           />
         </Fragment>
@@ -460,6 +533,7 @@ type GroupSectionProps = {
   tabs: TabSnapshot[];
   reorderEnabled: boolean;
   onRestoreGroup: (groupId: number) => void;
+  onRenameGroup: (groupUid: string, title: string) => void;
   rowActions: TabRowActions;
   activeDrop: ActiveDrop | null;
   dropGapPx: number;
@@ -471,10 +545,15 @@ function GroupSection({
   tabs,
   reorderEnabled,
   onRestoreGroup,
+  onRenameGroup,
   rowActions,
   activeDrop,
   dropGapPx,
 }: GroupSectionProps) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [draftTitle, setDraftTitle] = useState(group.title);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const hasTabs = tabs.length > 0;
   const {
     setNodeRef: setDragRef,
     attributes,
@@ -486,8 +565,43 @@ function GroupSection({
       dragItem: { type: 'group', setId, groupUid: group.uid },
       dragLabel: group.title,
     },
-    disabled: !reorderEnabled,
+    disabled: !reorderEnabled || isEditing,
   });
+
+  useEffect(() => {
+    if (!isEditing) {
+      return;
+    }
+    const frame = requestAnimationFrame(() => {
+      inputRef.current?.focus();
+      inputRef.current?.select();
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [isEditing]);
+
+  const commitTitle = () => {
+    const nextTitle = draftTitle.trim() || '新規グループ';
+    setIsEditing(false);
+    if (nextTitle !== group.title) {
+      onRenameGroup(group.uid, nextTitle);
+    }
+  };
+
+  const cancelEdit = () => {
+    setIsEditing(false);
+    setDraftTitle(group.title);
+  };
+
+  const handleTitleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      commitTitle();
+    }
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      cancelEdit();
+    }
+  };
 
   return (
     <section
@@ -501,13 +615,42 @@ function GroupSection({
             type="button"
             aria-label="グループを並び替え"
             onClick={(event) => event.stopPropagation()}
-            disabled={!reorderEnabled}
+            disabled={!reorderEnabled || isEditing}
             {...attributes}
             {...listeners}
           />
-          <h3 className="manager__group-title">{group.title}</h3>
+          {isEditing ? (
+            <input
+              ref={inputRef}
+              className="manager__group-title-input"
+              type="text"
+              value={draftTitle}
+              onChange={(event) => setDraftTitle(event.target.value)}
+              onBlur={commitTitle}
+              onKeyDown={handleTitleKeyDown}
+            />
+          ) : (
+            <h3 className="manager__group-title">
+              <button
+                className="manager__group-title-button"
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setDraftTitle(group.title);
+                  setIsEditing(true);
+                }}
+              >
+                {group.title}
+              </button>
+            </h3>
+          )}
         </div>
-        <button className="ghost-button" type="button" onClick={() => onRestoreGroup(group.id)}>
+        <button
+          className="ghost-button"
+          type="button"
+          onClick={() => onRestoreGroup(group.id)}
+          disabled={!hasTabs}
+        >
           グループを復元
         </button>
       </div>
@@ -528,9 +671,14 @@ type SetCardProps = {
   set: HistorySet;
   fullSet?: HistorySet;
   reorderEnabled: boolean;
+  shouldStartEditing: boolean;
+  onStartEditingHandled: () => void;
   onRestoreSet: () => void;
   onDeleteSet: () => void;
+  onRenameSet: (title: string) => void;
   onRestoreGroup: (groupId: number) => void;
+  onRenameGroup: (groupUid: string, title: string) => void;
+  onCreateGroup: () => void;
   rowActions: TabRowActions;
   activeDrop: ActiveDrop | null;
   dropGapPx: number;
@@ -540,21 +688,29 @@ function SetCard({
   set,
   fullSet,
   reorderEnabled,
+  shouldStartEditing,
+  onStartEditingHandled,
   onRestoreSet,
   onDeleteSet,
+  onRenameSet,
   onRestoreGroup,
+  onRenameGroup,
+  onCreateGroup,
   rowActions,
   activeDrop,
   dropGapPx,
 }: SetCardProps) {
-  const groupedTabs = groupTabsById(set.tabs);
   const totalTabs = fullSet?.tabs.length ?? set.tabs.length;
   const visibleTabs = set.tabs.length;
   const tabSummary =
     totalTabs === visibleTabs
       ? `保存済みタブ: ${visibleTabs}件`
       : `表示中: ${visibleTabs} / ${totalTabs}件`;
-  const dragLabel = formatTimestamp(set.createdAt);
+  const dragLabel = set.name;
+  const [isEditing, setIsEditing] = useState(false);
+  const [draftTitle, setDraftTitle] = useState(set.name);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const titleEditing = isEditing || shouldStartEditing;
   const {
     setNodeRef: setDragRef,
     attributes,
@@ -566,15 +722,53 @@ function SetCard({
       dragItem: { type: 'set', setId: set.id },
       dragLabel,
     },
-    disabled: !reorderEnabled,
+    disabled: !reorderEnabled || titleEditing,
   });
 
-  const groupEntries = set.groups
-    .map((group) => ({ group, tabs: groupedTabs.get(group.id) ?? [] }))
-    .filter((entry) => entry.tabs.length > 0);
-  const ungroupedTabs = groupedTabs.get(null) ?? [];
-  const shouldShowUngrouped = ungroupedTabs.length > 0;
-  const shouldShowGroupList = reorderEnabled || groupEntries.length > 0;
+  useEffect(() => {
+    if (!shouldStartEditing) {
+      return;
+    }
+    onStartEditingHandled();
+  }, [onStartEditingHandled, shouldStartEditing]);
+
+  useEffect(() => {
+    if (!titleEditing) {
+      return;
+    }
+    const frame = requestAnimationFrame(() => {
+      inputRef.current?.focus();
+      inputRef.current?.select();
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [titleEditing]);
+
+  const commitTitle = () => {
+    const nextTitle = normalizeManualHistorySetName(draftTitle);
+    setIsEditing(false);
+    if (nextTitle !== set.name) {
+      onRenameSet(nextTitle);
+    }
+  };
+
+  const cancelEdit = () => {
+    setIsEditing(false);
+    setDraftTitle(set.name);
+  };
+
+  const handleTitleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      commitTitle();
+    }
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      cancelEdit();
+    }
+  };
+
+  const layoutEntries = buildLayoutEntries(set);
+  const shouldShowBlockList = reorderEnabled || layoutEntries.length > 0;
 
   return (
     <article
@@ -586,14 +780,38 @@ function SetCard({
           <button
             className="drag-handle"
             type="button"
-            aria-label="セッションを並び替え"
+            aria-label="ウィンドウを並び替え"
             onClick={(event) => event.stopPropagation()}
-            disabled={!reorderEnabled}
+            disabled={!reorderEnabled || titleEditing}
             {...attributes}
             {...listeners}
           />
           <div>
-            <h2 className="manager__card-title">{dragLabel}</h2>
+            <h2 className="manager__card-title">
+              {titleEditing ? (
+                <input
+                  ref={inputRef}
+                  className="manager__card-title-input"
+                  type="text"
+                  value={draftTitle}
+                  onChange={(event) => setDraftTitle(event.target.value)}
+                  onBlur={commitTitle}
+                  onKeyDown={handleTitleKeyDown}
+                />
+              ) : (
+                <button
+                  className="manager__card-title-button"
+                  type="button"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setDraftTitle(set.name);
+                    setIsEditing(true);
+                  }}
+                >
+                  {set.name}
+                </button>
+              )}
+            </h2>
             <p className="manager__card-meta">{tabSummary}</p>
           </div>
         </div>
@@ -602,56 +820,33 @@ function SetCard({
             すべて復元
           </button>
           <button className="ghost-button" type="button" onClick={onDeleteSet}>
-            セットを削除
+            ウィンドウを削除
           </button>
         </div>
       </div>
 
-      {shouldShowGroupList ? (
-        <GroupList
-          entries={groupEntries}
-          setId={set.id}
-          reorderEnabled={reorderEnabled}
-          onRestoreGroup={onRestoreGroup}
-          rowActions={rowActions}
-          activeDrop={activeDrop}
-          dropGapPx={dropGapPx}
-        />
-      ) : null}
-
-      {shouldShowUngrouped ? (
-        <section className="manager__group">
-          <div className="manager__group-header">
-            <h3 className="manager__group-title">未グループ</h3>
+      {shouldShowBlockList ? (
+        <>
+          <div className="manager__group-controls">
+            <span className="manager__group-label">グループ</span>
+            <button className="ghost-button" type="button" onClick={onCreateGroup}>
+              新規グループ
+            </button>
           </div>
-          <TabList
-            tabs={ungroupedTabs}
+          <BlockList
+            entries={layoutEntries}
             setId={set.id}
-            groupUid={null}
             reorderEnabled={reorderEnabled}
+            onRestoreGroup={onRestoreGroup}
+            onRenameGroup={onRenameGroup}
             rowActions={rowActions}
             activeDrop={activeDrop}
             dropGapPx={dropGapPx}
           />
-        </section>
+        </>
       ) : null}
     </article>
   );
-}
-
-function formatTimestamp(timestamp: number) {
-  return new Date(timestamp).toLocaleString();
-}
-
-function groupTabsById(tabs: TabSnapshot[]) {
-  const grouped = new Map<number | null, TabSnapshot[]>();
-  for (const tab of tabs) {
-    const key = tab.groupId ?? null;
-    const existing = grouped.get(key) ?? [];
-    existing.push(tab);
-    grouped.set(key, existing);
-  }
-  return grouped;
 }
 
 async function getCurrentWindowId() {
@@ -881,6 +1076,7 @@ export function ManagerApp() {
   const [activeDrop, setActiveDrop] = useState<ActiveDrop | null>(null);
   const [dropGapPx, setDropGapPx] = useState(DEFAULT_DROP_GAP_PX);
   const [dragSpacerPx, setDragSpacerPx] = useState(0);
+  const [editingSetId, setEditingSetId] = useState<string | null>(null);
   const dragLatestScrollYRef = useRef<number | null>(null);
   const bodyScrollLockRef = useRef<BodyScrollLockState | null>(null);
 
@@ -1145,6 +1341,28 @@ export function ManagerApp() {
   const restoreLoadingSuppressionEnabled = state.restoreLoadingSuppressionEnabled ?? true;
   const removeRestoredTabsEnabled = state.removeRestoredTabsEnabled ?? true;
 
+  const handleCreateWindow = async () => {
+    setQuery('');
+    setGroupFilter(GROUP_FILTER_ALL);
+    const id = createHistoryId();
+    const createdAt = Date.now();
+    const created: HistorySet = {
+      id,
+      name: DEFAULT_NEW_WINDOW_NAME,
+      createdAt,
+      windowId: 0,
+      tabs: [],
+      groups: [],
+      layout: [],
+    };
+    const updated = await updateState((current) => ({
+      ...current,
+      historySets: [created, ...current.historySets],
+    }));
+    await refreshState(updated.historySets);
+    setEditingSetId(id);
+  };
+
   const handleDeleteSet = async (setId: string) => {
     const updated = await updateState((current) => ({
       ...current,
@@ -1161,13 +1379,71 @@ export function ManagerApp() {
           return set;
         }
         const filteredTabs = set.tabs.filter((tab) => tab.uid !== tabToDelete.uid);
-        const remainingGroupIds = new Set(
-          filteredTabs.map((tab) => tab.groupId).filter((id): id is number => id !== null),
-        );
         return {
           ...set,
           tabs: filteredTabs,
-          groups: set.groups.filter((group) => remainingGroupIds.has(group.id)),
+          groups: set.groups,
+          layout: normalizeLayout(set.layout, set.groups, filteredTabs),
+        };
+      }),
+    }));
+    await refreshState(updated.historySets);
+  };
+
+  const handleRenameSet = async (setId: string, title: string) => {
+    const nextTitle = normalizeManualHistorySetName(title);
+    const updated = await updateState((current) => ({
+      ...current,
+      historySets: current.historySets.map((set) =>
+        set.id === setId ? { ...set, name: nextTitle } : set,
+      ),
+    }));
+    await refreshState(updated.historySets);
+  };
+
+  const handleCreateGroup = async (setId: string) => {
+    const updated = await updateState((current) => ({
+      ...current,
+      historySets: current.historySets.map((set) => {
+        if (set.id !== setId) {
+          return set;
+        }
+        const nextId =
+          set.groups.length === 0 ? 1 : Math.max(...set.groups.map((group) => group.id)) + 1;
+        const newGroup: GroupSnapshot = {
+          uid: createUid('group'),
+          id: nextId,
+          title: '新規グループ',
+          color: 'grey',
+          index: set.groups.length,
+        };
+        const nextLayout = [
+          ...normalizeLayout(set.layout, set.groups, set.tabs),
+          { type: 'group', uid: newGroup.uid } as const,
+        ];
+        return {
+          ...set,
+          groups: [...set.groups, newGroup],
+          layout: nextLayout,
+        };
+      }),
+    }));
+    await refreshState(updated.historySets);
+  };
+
+  const handleRenameGroup = async (setId: string, groupUid: string, title: string) => {
+    const nextTitle = title.trim() || '新規グループ';
+    const updated = await updateState((current) => ({
+      ...current,
+      historySets: current.historySets.map((set) => {
+        if (set.id !== setId) {
+          return set;
+        }
+        return {
+          ...set,
+          groups: set.groups.map((group) =>
+            group.uid === groupUid ? { ...group, title: nextTitle } : group,
+          ),
         };
       }),
     }));
@@ -1188,14 +1464,9 @@ export function ManagerApp() {
       if (removeRestoredTabsEnabled) {
         const updated = await updateState((current) => ({
           ...current,
-          historySets: current.historySets
-            .map((item) => {
-              if (item.id !== targetSet.id) {
-                return item;
-              }
-              return cleanupHistorySet(item, restoredTabs);
-            })
-            .filter((item): item is HistorySet => item !== null),
+          historySets: current.historySets.map((item) =>
+            item.id === targetSet.id ? cleanupHistorySet(item, restoredTabs) : item,
+          ),
         }));
         await refreshState(updated.historySets);
       }
@@ -1224,6 +1495,10 @@ export function ManagerApp() {
     try {
       const windowId = await getCurrentWindowId();
       const tabs = targetSet.tabs.filter((tab) => tab.groupId === groupId);
+      if (tabs.length === 0) {
+        setActionMessage('復元できるタブがありません。');
+        return;
+      }
       const { restoredTabs, failedTabs } = await restoreTabs(
         tabs,
         [group],
@@ -1233,14 +1508,9 @@ export function ManagerApp() {
       if (removeRestoredTabsEnabled) {
         const updated = await updateState((current) => ({
           ...current,
-          historySets: current.historySets
-            .map((item) => {
-              if (item.id !== targetSet.id) {
-                return item;
-              }
-              return cleanupHistorySet(item, restoredTabs);
-            })
-            .filter((item): item is HistorySet => item !== null),
+          historySets: current.historySets.map((item) =>
+            item.id === targetSet.id ? cleanupHistorySet(item, restoredTabs) : item,
+          ),
         }));
         await refreshState(updated.historySets);
       }
@@ -1268,9 +1538,7 @@ export function ManagerApp() {
       if (removeRestoredTabsEnabled) {
         const updated = await updateState((current) => ({
           ...current,
-          historySets: current.historySets
-            .map((item) => cleanupHistorySet(item, restoredTabs))
-            .filter((item): item is HistorySet => item !== null),
+          historySets: current.historySets.map((item) => cleanupHistorySet(item, restoredTabs)),
         }));
         await refreshState(updated.historySets);
       }
@@ -1288,7 +1556,7 @@ export function ManagerApp() {
   if (state.status === 'loading') {
     return (
       <div className="manager manager--center">
-        <p>タブ履歴を読み込んでいます...</p>
+        <p>ウィンドウ履歴を読み込んでいます...</p>
       </div>
     );
   }
@@ -1323,10 +1591,8 @@ export function ManagerApp() {
               設定
             </a>
           </div>
-          <h1 className="manager__title">保存済みのタブセッション</h1>
-          <p className="manager__subtitle">
-            保存済みのタブセッションを復元・検索・フィルタできます。
-          </p>
+          <h1 className="manager__title">保存済みウィンドウ</h1>
+          <p className="manager__subtitle">保存済みウィンドウを復元・検索・フィルタできます。</p>
         </header>
 
         <section className="manager__controls">
@@ -1352,6 +1618,9 @@ export function ManagerApp() {
               </option>
             ))}
           </select>
+          <button className="ghost-button" type="button" onClick={handleCreateWindow}>
+            新規ウィンドウ
+          </button>
           {actionMessage ? <span className="manager__status">{actionMessage}</span> : null}
         </section>
 
@@ -1384,9 +1653,20 @@ export function ManagerApp() {
                       set={set}
                       fullSet={fullSet}
                       reorderEnabled={reorderEnabled}
+                      shouldStartEditing={editingSetId === set.id}
+                      onStartEditingHandled={() => {
+                        if (editingSetId === set.id) {
+                          setEditingSetId(null);
+                        }
+                      }}
                       onRestoreSet={() => handleRestoreSet(set)}
                       onDeleteSet={() => handleDeleteSet(set.id)}
+                      onRenameSet={(title) => handleRenameSet(set.id, title)}
                       onRestoreGroup={(groupId) => handleRestoreGroup(set, groupId)}
+                      onRenameGroup={(groupUid, title) =>
+                        handleRenameGroup(set.id, groupUid, title)
+                      }
+                      onCreateGroup={() => handleCreateGroup(set.id)}
                       rowActions={rowActions}
                       activeDrop={activeDrop}
                       dropGapPx={dropGapPx}

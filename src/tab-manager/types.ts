@@ -6,6 +6,8 @@ export type GroupSnapshot = {
   index: number;
 };
 
+export type LayoutItem = { type: 'group'; uid: string } | { type: 'tab'; uid: string };
+
 export type TabSnapshot = {
   uid: string;
   title: string;
@@ -16,10 +18,12 @@ export type TabSnapshot = {
 
 export type HistorySet = {
   id: string;
+  name: string;
   createdAt: number;
   windowId: number;
   tabs: TabSnapshot[];
   groups: GroupSnapshot[];
+  layout: LayoutItem[];
 };
 
 export type TabManagerState = {

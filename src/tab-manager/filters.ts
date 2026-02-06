@@ -1,4 +1,5 @@
 import type { HistorySet, TabSnapshot } from './types';
+import { buildLayoutFromData } from './layout';
 
 export const GROUP_FILTER_ALL = 'all';
 export const GROUP_FILTER_UNGROUPED = 'ungrouped';
@@ -63,6 +64,7 @@ export function filterHistorySets(historySets: HistorySet[], options: FilterOpti
         ...set,
         tabs: filteredTabs,
         groups: filteredGroups,
+        layout: buildLayoutFromData(filteredGroups, filteredTabs),
       };
     })
     .filter((set): set is HistorySet => set !== null);
@@ -71,8 +73,16 @@ export function filterHistorySets(historySets: HistorySet[], options: FilterOpti
 export function buildGroupFilterOptions(historySets: HistorySet[]) {
   const titles = new Set<string>();
   for (const set of historySets) {
+    const groupIds = new Set<number>();
+    for (const tab of set.tabs) {
+      if (tab.groupId !== null) {
+        groupIds.add(tab.groupId);
+      }
+    }
     for (const group of set.groups) {
-      titles.add(group.title);
+      if (groupIds.has(group.id)) {
+        titles.add(group.title);
+      }
     }
   }
 

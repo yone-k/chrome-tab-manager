@@ -130,6 +130,28 @@ body {
   font-size: 18px;
 }
 
+.manager__card-title-button {
+  border: none;
+  background: none;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  cursor: text;
+  text-align: left;
+}
+
+.manager__card-title-button:hover {
+  text-decoration: underline;
+}
+
+.manager__card-title-input {
+  font-size: 18px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  border: 1px solid #cbd5f5;
+  min-width: 220px;
+}
+
 .manager__card-meta {
   margin: 0;
   font-size: 12px;
@@ -145,6 +167,10 @@ body {
 .manager__group {
   display: grid;
   gap: 8px;
+  padding: 12px;
+  border-radius: 14px;
+  border: 1px solid #e2e8f0;
+  background: #ffffff;
 }
 
 .manager__group-header {
@@ -165,12 +191,53 @@ body {
   font-size: 16px;
 }
 
+.manager__group-title-button {
+  border: none;
+  background: none;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  cursor: text;
+  text-align: left;
+}
+
+.manager__group-title-button:hover {
+  text-decoration: underline;
+}
+
+.manager__group-title-input {
+  font-size: 16px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  border: 1px solid #cbd5f5;
+  min-width: 180px;
+}
+
+.manager__group-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.manager__group-label {
+  font-size: 12px;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
 .manager__tab-list {
   list-style: none;
   margin: 0;
   padding: 0;
   display: grid;
   gap: 0;
+}
+
+.manager__tab-list--block {
+  margin: 0;
+  padding: 0;
 }
 
 .manager__tab {
@@ -236,7 +303,7 @@ body {
   position: relative;
 }
 
-.manager__group-list {
+.manager__block-list {
   display: grid;
   gap: 0;
 }

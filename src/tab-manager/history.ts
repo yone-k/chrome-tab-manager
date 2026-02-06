@@ -1,5 +1,8 @@
 import type { GroupSnapshot, HistorySet, TabSnapshot } from './types';
+import { buildLayoutFromData } from './layout';
 import { createUid } from './uid';
+
+export const DEFAULT_NEW_WINDOW_NAME = '新規ウィンドウ';
 
 export type TabInput = {
   title?: string;
@@ -17,11 +20,21 @@ export type GroupInput = {
 
 type BuildHistorySetInput = {
   id: string;
+  name: string;
   createdAt: number;
   windowId: number;
   tabs: TabInput[];
   groups: GroupInput[];
 };
+
+export function formatHistorySetNameFromCreatedAt(createdAt: number) {
+  return new Date(createdAt).toLocaleString();
+}
+
+export function normalizeManualHistorySetName(name: string) {
+  const normalized = name.trim();
+  return normalized.length > 0 ? normalized : DEFAULT_NEW_WINDOW_NAME;
+}
 
 function normalizeTab(tab: TabInput): TabSnapshot {
   const title = tab.title?.trim() || tab.url || 'Untitled';
@@ -70,10 +83,12 @@ export function buildHistorySet(input: BuildHistorySetInput): HistorySet {
 
   return {
     id: input.id,
+    name: normalizeManualHistorySetName(input.name),
     createdAt: input.createdAt,
     windowId: input.windowId,
     tabs,
     groups,
+    layout: buildLayoutFromData(groups, tabs),
   };
 }
 

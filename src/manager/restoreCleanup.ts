@@ -1,4 +1,5 @@
 import type { HistorySet, TabSnapshot } from '../tab-manager/types';
+import { normalizeLayout } from '../tab-manager/layout';
 
 type TabKey = string;
 
@@ -10,19 +11,10 @@ export function cleanupHistorySet(set: HistorySet, restoredTabs: TabSnapshot[]) 
   const restoredKeys = new Set(restoredTabs.map(buildTabKey));
   const remainingTabs = set.tabs.filter((tab) => !restoredKeys.has(buildTabKey(tab)));
 
-  if (remainingTabs.length === 0) {
-    return null;
-  }
-
-  const remainingGroupIds = new Set(
-    remainingTabs.map((tab) => tab.groupId).filter((id): id is number => id !== null),
-  );
-
-  const remainingGroups = set.groups.filter((group) => remainingGroupIds.has(group.id));
-
   return {
     ...set,
     tabs: remainingTabs,
-    groups: remainingGroups,
+    groups: set.groups,
+    layout: normalizeLayout(set.layout, set.groups, remainingTabs),
   };
 }
