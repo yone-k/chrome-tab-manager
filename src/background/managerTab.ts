@@ -15,7 +15,7 @@ function queryManagerTabs(managerUrl: string) {
 
 function getCurrentWindowId() {
   return new Promise<number>((resolve, reject) => {
-    chrome.windows.getCurrent((window: chrome.windows.Window) => {
+    chrome.windows.getLastFocused((window: chrome.windows.Window) => {
       if (chrome.runtime.lastError) {
         reject(chrome.runtime.lastError);
         return;

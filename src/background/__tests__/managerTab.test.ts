@@ -24,13 +24,13 @@ function installChromeMock({
   queryTabs,
   updateTab,
   createTab,
-  getCurrentWindow,
+  getLastFocusedWindow,
   failCreateWithWindowId,
 }: {
   queryTabs?: MockTab[];
   updateTab?: (tabId: number, updateProperties: chrome.tabs.UpdateProperties) => void;
   createTab?: (createProperties: chrome.tabs.CreateProperties) => void;
-  getCurrentWindow?: MockWindow;
+  getLastFocusedWindow?: MockWindow;
   failCreateWithWindowId?: number;
 }) {
   let runtimeLastError: chrome.runtime.LastError | undefined;
@@ -63,8 +63,8 @@ function installChromeMock({
       } as chrome.tabs.Tab);
     },
   );
-  const getCurrent = vi.fn((callback: (window: chrome.windows.Window) => void) => {
-    callback((getCurrentWindow ?? { id: 1 }) as chrome.windows.Window);
+  const getLastFocused = vi.fn((callback: (window: chrome.windows.Window) => void) => {
+    callback((getLastFocusedWindow ?? { id: 1 }) as chrome.windows.Window);
   });
 
   vi.stubGlobal('chrome', {
@@ -80,11 +80,11 @@ function installChromeMock({
       create,
     },
     windows: {
-      getCurrent,
+      getLastFocused,
     },
   } as unknown as typeof chrome);
 
-  return { query, update, create, getCurrent };
+  return { query, update, create, getLastFocused };
 }
 
 describe('findManagerTabInWindow', () => {
@@ -121,7 +121,7 @@ describe('openManagerTabInCurrentWindow', () => {
   });
 
   it('現在ウィンドウに既存管理画面があればそれをアクティブ化する', async () => {
-    const { update, create, getCurrent } = installChromeMock({
+    const { update, create, getLastFocused } = installChromeMock({
       queryTabs: [
         { id: 10, windowId: 123, url: managerUrl },
         { id: 20, windowId: 999, url: managerUrl },
@@ -132,7 +132,7 @@ describe('openManagerTabInCurrentWindow', () => {
 
     expect(update).toHaveBeenCalledWith(10, { active: true }, expect.any(Function));
     expect(create).not.toHaveBeenCalled();
-    expect(getCurrent).not.toHaveBeenCalled();
+    expect(getLastFocused).not.toHaveBeenCalled();
   });
 
   it('現在ウィンドウに管理画面がなければ同一ウィンドウへ新規作成する', async () => {
@@ -150,14 +150,14 @@ describe('openManagerTabInCurrentWindow', () => {
   });
 
   it('currentWindowId未指定時は現在ウィンドウIDを取得して開く', async () => {
-    const { create, getCurrent } = installChromeMock({
+    const { create, getLastFocused } = installChromeMock({
       queryTabs: [],
-      getCurrentWindow: { id: 321 },
+      getLastFocusedWindow: { id: 321 },
     });
 
     await openManagerTabInCurrentWindow();
 
-    expect(getCurrent).toHaveBeenCalledTimes(1);
+    expect(getLastFocused).toHaveBeenCalledTimes(1);
     expect(create).toHaveBeenCalledWith(
       { url: managerUrl, windowId: 321, active: true },
       expect.any(Function),
