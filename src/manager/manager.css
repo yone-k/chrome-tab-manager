@@ -212,16 +212,20 @@ body {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  align-items: center;
-  justify-content: space-between;
+  align-items: flex-start;
 }
 
 .manager__card-header-main {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 6px;
   min-width: 0;
   flex: 1 1 auto;
+}
+
+.manager__card-header-main > .drag-handle {
+  align-self: flex-start;
+  margin-top: 1px;
 }
 
 .manager__card-header-text {
@@ -309,6 +313,9 @@ body {
   display: flex;
   gap: 4px;
   flex-wrap: wrap;
+  justify-content: flex-end;
+  width: 100%;
+  margin-top: 4px;
 }
 
 .manager__group {

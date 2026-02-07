@@ -1126,32 +1126,32 @@ function SetCard({
                 </span>
               ) : null}
             </div>
+            <div className="manager__card-actions">
+              <ToggleButton
+                pressed={set.locked}
+                onLabel="ロック解除"
+                offLabel="ロック"
+                ariaLabelOn="ロック解除"
+                ariaLabelOff="ロック"
+                onToggle={onToggleSetLock}
+              />
+              <ToggleButton
+                pressed={isBoundCurrent}
+                onLabel="リンク解除"
+                offLabel="管理画面リンク"
+                ariaLabelOn="リンク解除"
+                ariaLabelOff="管理画面リンク"
+                onToggle={onToggleBinding}
+                disabled={bindingToggleDisabled}
+              />
+              <Button variant="primary" onClick={onRestoreSet}>
+                すべて復元
+              </Button>
+              <Button variant="ghost" onClick={onDeleteSet} disabled={set.locked}>
+                ウィンドウを削除
+              </Button>
+            </div>
           </div>
-        </div>
-        <div className="manager__card-actions">
-          <ToggleButton
-            pressed={set.locked}
-            onLabel="ロック解除"
-            offLabel="ロック"
-            ariaLabelOn="ロック解除"
-            ariaLabelOff="ロック"
-            onToggle={onToggleSetLock}
-          />
-          <ToggleButton
-            pressed={isBoundCurrent}
-            onLabel="リンク解除"
-            offLabel="管理画面リンク"
-            ariaLabelOn="リンク解除"
-            ariaLabelOff="管理画面リンク"
-            onToggle={onToggleBinding}
-            disabled={bindingToggleDisabled}
-          />
-          <Button variant="primary" onClick={onRestoreSet}>
-            すべて復元
-          </Button>
-          <Button variant="ghost" onClick={onDeleteSet} disabled={set.locked}>
-            ウィンドウを削除
-          </Button>
         </div>
       </div>
 
