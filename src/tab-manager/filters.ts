@@ -1,12 +1,19 @@
 import type { HistorySet, TabSnapshot } from './types';
 import { buildLayoutFromData } from './layout';
 
+export const SET_FILTER_ALL = 'all-sets';
 export const GROUP_FILTER_ALL = 'all';
 export const GROUP_FILTER_UNGROUPED = 'ungrouped';
 
-type FilterOptions = {
+export type FilterOptions = {
   query: string;
+  setFilter: string;
   groupFilter: string;
+};
+
+export type SetFilterOption = {
+  value: string;
+  label: string;
 };
 
 function normalizeQuery(query: string) {
@@ -40,10 +47,18 @@ function buildGroupTitleMap(historySet: HistorySet) {
   return new Map(historySet.groups.map((group) => [group.id, group.title]));
 }
 
+function filterSetsBySetFilter(historySets: HistorySet[], setFilter: string) {
+  if (setFilter === SET_FILTER_ALL) {
+    return historySets;
+  }
+  return historySets.filter((set) => set.id === setFilter);
+}
+
 export function filterHistorySets(historySets: HistorySet[], options: FilterOptions) {
   const query = normalizeQuery(options.query);
+  const targetSets = filterSetsBySetFilter(historySets, options.setFilter);
 
-  return historySets
+  return targetSets
     .map((set) => {
       const groupTitlesById = buildGroupTitleMap(set);
       const filteredTabs = set.tabs.filter(
@@ -70,9 +85,21 @@ export function filterHistorySets(historySets: HistorySet[], options: FilterOpti
     .filter((set): set is HistorySet => set !== null);
 }
 
-export function buildGroupFilterOptions(historySets: HistorySet[]) {
+export function buildSetFilterOptions(historySets: HistorySet[]): SetFilterOption[] {
+  return [
+    { value: SET_FILTER_ALL, label: 'すべてのウィンドウ' },
+    ...historySets.map((set) => ({
+      value: set.id,
+      label: `${set.name} (${set.tabs.length})`,
+    })),
+  ];
+}
+
+export function buildGroupFilterOptions(historySets: HistorySet[], setFilter: string) {
   const titles = new Set<string>();
-  for (const set of historySets) {
+  const targetSets = filterSetsBySetFilter(historySets, setFilter);
+
+  for (const set of targetSets) {
     const groupIds = new Set<number>();
     for (const tab of set.tabs) {
       if (tab.groupId !== null) {

@@ -24,8 +24,10 @@ import {
 import { Button } from '../components/Button';
 import { ToggleButton } from '../components/ToggleButton';
 import {
+  buildSetFilterOptions,
   buildGroupFilterOptions,
   filterHistorySets,
+  SET_FILTER_ALL,
   GROUP_FILTER_ALL,
   GROUP_FILTER_UNGROUPED,
 } from '../tab-manager/filters';
@@ -1292,6 +1294,7 @@ export function ManagerApp() {
     removeRestoredTabsEnabled?: boolean;
   }>({ status: 'loading' });
   const [query, setQuery] = useState('');
+  const [setFilter, setSetFilter] = useState(SET_FILTER_ALL);
   const [groupFilter, setGroupFilter] = useState(GROUP_FILTER_ALL);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [currentManagerContext, setCurrentManagerContext] = useState<ManagerContext | null>(null);
@@ -1303,7 +1306,6 @@ export function ManagerApp() {
   const dragLatestScrollYRef = useRef<number | null>(null);
   const bodyScrollLockRef = useRef<BodyScrollLockState | null>(null);
 
-  const reorderEnabled = query.trim() === '' && groupFilter === GROUP_FILTER_ALL;
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: { distance: 4 },
@@ -1372,18 +1374,10 @@ export function ManagerApp() {
     };
   }, []);
 
-  const filteredSets = useMemo(() => {
-    if (state.status !== 'ready' || !state.data) {
-      return [];
-    }
-    return filterHistorySets(state.data, { query, groupFilter });
-  }, [groupFilter, query, state]);
-
   const fullSets = useMemo(
     () => (state.status === 'ready' && state.data ? state.data : []),
     [state],
   );
-  const visibleSets = reorderEnabled ? fullSets : filteredSets;
   const overlayContent = useMemo(() => {
     if (!activeDrag) {
       return null;
@@ -1434,12 +1428,34 @@ export function ManagerApp() {
     );
   }, [activeDrag, fullSets]);
 
+  const setOptions = useMemo(() => {
+    if (state.status !== 'ready' || !state.data) {
+      return [{ value: SET_FILTER_ALL, label: 'すべてのウィンドウ' }];
+    }
+    return buildSetFilterOptions(state.data);
+  }, [state]);
+
   const groupOptions = useMemo(() => {
     if (state.status !== 'ready' || !state.data) {
       return [GROUP_FILTER_ALL, GROUP_FILTER_UNGROUPED];
     }
-    return buildGroupFilterOptions(state.data);
-  }, [state]);
+    return buildGroupFilterOptions(state.data, setFilter);
+  }, [setFilter, state]);
+
+  const activeGroupFilter = groupOptions.includes(groupFilter) ? groupFilter : GROUP_FILTER_ALL;
+  const reorderEnabled =
+    query.trim() === '' && setFilter === SET_FILTER_ALL && activeGroupFilter === GROUP_FILTER_ALL;
+  const filteredSets = useMemo(() => {
+    if (state.status !== 'ready' || !state.data) {
+      return [];
+    }
+    return filterHistorySets(state.data, {
+      query,
+      setFilter,
+      groupFilter: activeGroupFilter,
+    });
+  }, [activeGroupFilter, query, setFilter, state]);
+  const visibleSets = reorderEnabled ? fullSets : filteredSets;
 
   const refreshState = async (nextSets: HistorySet[]) => {
     setState((current) => ({
@@ -1605,6 +1621,7 @@ export function ManagerApp() {
 
   const handleCreateWindow = async () => {
     setQuery('');
+    setSetFilter(SET_FILTER_ALL);
     setGroupFilter(GROUP_FILTER_ALL);
     const id = createHistoryId();
     const createdAt = Date.now();
@@ -2014,7 +2031,29 @@ export function ManagerApp() {
           />
           <select
             className="manager__select"
-            value={groupFilter}
+            value={setFilter}
+            onChange={(event) => {
+              const nextSetFilter = event.target.value;
+              setSetFilter(nextSetFilter);
+              if (state.status !== 'ready' || !state.data) {
+                setGroupFilter(GROUP_FILTER_ALL);
+                return;
+              }
+              const nextGroupOptions = buildGroupFilterOptions(state.data, nextSetFilter);
+              if (!nextGroupOptions.includes(groupFilter)) {
+                setGroupFilter(GROUP_FILTER_ALL);
+              }
+            }}
+          >
+            {setOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+          <select
+            className="manager__select"
+            value={activeGroupFilter}
             onChange={(event) => setGroupFilter(event.target.value)}
           >
             {groupOptions.map((option) => (

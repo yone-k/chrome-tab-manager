@@ -78,18 +78,22 @@ body {
 
 .manager__search {
   flex: 1 1 220px;
-  padding: 6px 8px;
-  border-radius: 8px;
+  padding: 3px 6px;
+  border-radius: 6px;
   border: 1px solid #cbd5f5;
-  font-size: 12px;
+  font-size: 10px;
+  line-height: 1.2;
+  min-height: 24px;
 }
 
 .manager__select {
-  padding: 6px 8px;
-  border-radius: 8px;
+  padding: 3px 6px;
+  border-radius: 6px;
   border: 1px solid #cbd5f5;
-  font-size: 12px;
+  font-size: 10px;
+  line-height: 1.2;
   background: #fff;
+  min-height: 24px;
 }
 
 .manager__status {
