@@ -35,8 +35,8 @@
   --tm-subtle-text: #94a3b8;
   --tm-muted-text: #9ca3af;
   --tm-surface: #111827;
-  --tm-surface-strong: #1f2937;
-  --tm-surface-muted: #1f2937;
+  --tm-surface-strong: #1b2535;
+  --tm-surface-muted: #253247;
   --tm-surface-border: #334155;
   --tm-input-border: #475569;
   --tm-accent-bg: #2563eb;
@@ -50,9 +50,9 @@
   --tm-button-primary-bg: #3b82f6;
   --tm-button-primary-text: #0b1220;
   --tm-button-primary-hover: #60a5fa;
-  --tm-button-ghost-bg: #1f2937;
+  --tm-button-ghost-bg: #334155;
   --tm-button-ghost-text: #e5e7eb;
-  --tm-button-ghost-hover: #374151;
+  --tm-button-ghost-hover: #475569;
   --tm-toggle-pressed-bg: #1d4ed8;
   --tm-toggle-pressed-text: #e5e7eb;
   --tm-toggle-pressed-hover: #2563eb;
