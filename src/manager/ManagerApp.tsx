@@ -362,7 +362,7 @@ function TabRow({ tab, setId, reorderEnabled, rowActions, locked, onToggleLock }
       <div className="manager__tab-main">
         <p className="manager__tab-title">
           <span className="manager__title-with-lock">
-            <span>{tab.title}</span>
+            <span className="manager__title-text">{tab.title}</span>
             {locked ? (
               <span className="manager__lock-indicator" aria-hidden="true">
                 🔒
@@ -729,7 +729,7 @@ function GroupSection({
                 }}
               >
                 <span className="manager__title-with-lock">
-                  <span>{group.title}</span>
+                  <span className="manager__title-text">{group.title}</span>
                   {groupLocked ? (
                     <span className="manager__lock-indicator" aria-hidden="true">
                       🔒
@@ -908,7 +908,7 @@ function SetCard({
             {...attributes}
             {...listeners}
           />
-          <div>
+          <div className="manager__card-header-text">
             <h2 className="manager__card-title">
               {titleEditing ? (
                 <input
@@ -931,7 +931,7 @@ function SetCard({
                   }}
                 >
                   <span className="manager__title-with-lock">
-                    <span>{set.name}</span>
+                    <span className="manager__title-text">{set.name}</span>
                     {set.locked ? (
                       <span className="manager__lock-indicator" aria-hidden="true">
                         🔒

@@ -127,11 +127,19 @@ body {
   display: flex;
   align-items: center;
   gap: 6px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.manager__card-header-text {
+  min-width: 0;
+  flex: 1 1 auto;
 }
 
 .manager__card-title {
   margin: 0;
   font-size: 14px;
+  min-width: 0;
 }
 
 .manager__title-with-lock {
@@ -139,6 +147,17 @@ body {
   align-items: center;
   gap: 3px;
   min-width: 0;
+  width: 100%;
+  max-width: 100%;
+}
+
+.manager__title-text {
+  display: block;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .manager__lock-indicator {
@@ -154,6 +173,7 @@ body {
   color: inherit;
   cursor: text;
   text-align: left;
+  max-width: 100%;
 }
 
 .manager__card-title-button:hover {
@@ -218,11 +238,14 @@ body {
   display: flex;
   align-items: center;
   gap: 6px;
+  min-width: 0;
+  flex: 1 1 auto;
 }
 
 .manager__group-title {
   margin: 0;
   font-size: 13px;
+  min-width: 0;
 }
 
 .manager__group-title-button {
@@ -233,6 +256,7 @@ body {
   color: inherit;
   cursor: text;
   text-align: left;
+  max-width: 100%;
 }
 
 .manager__group-title-button:hover {
@@ -310,6 +334,10 @@ body {
   margin: 0;
   font-weight: 600;
   font-size: 11px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .manager__tab-url {
