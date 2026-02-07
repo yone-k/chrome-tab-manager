@@ -1155,30 +1155,32 @@ function SetCard({
         </div>
       </div>
 
-      {shouldShowBlockList ? (
-        <>
-          <div className="manager__group-controls">
-            <span className="manager__group-label">グループ</span>
-            <Button variant="ghost" onClick={onCreateGroup}>
-              新規グループ
-            </Button>
-          </div>
-          <BlockList
-            entries={layoutEntries}
-            set={set}
-            setId={set.id}
-            reorderEnabled={reorderEnabled}
-            onRestoreGroup={onRestoreGroup}
-            onRenameGroup={onRenameGroup}
-            onDeleteGroup={onDeleteGroup}
-            onToggleGroupLock={onToggleGroupLock}
-            onToggleTabLock={onToggleTabLock}
-            rowActions={rowActions}
-            activeDrop={activeDrop}
-            dropGapPx={dropGapPx}
-          />
-        </>
-      ) : null}
+      <div className="manager__card-body">
+        {shouldShowBlockList ? (
+          <>
+            <div className="manager__group-controls">
+              <span className="manager__group-label">グループ</span>
+              <Button variant="ghost" onClick={onCreateGroup}>
+                新規グループ
+              </Button>
+            </div>
+            <BlockList
+              entries={layoutEntries}
+              set={set}
+              setId={set.id}
+              reorderEnabled={reorderEnabled}
+              onRestoreGroup={onRestoreGroup}
+              onRenameGroup={onRenameGroup}
+              onDeleteGroup={onDeleteGroup}
+              onToggleGroupLock={onToggleGroupLock}
+              onToggleTabLock={onToggleTabLock}
+              rowActions={rowActions}
+              activeDrop={activeDrop}
+              dropGapPx={dropGapPx}
+            />
+          </>
+        ) : null}
+      </div>
     </article>
   );
 }
@@ -1942,9 +1944,9 @@ export function ManagerApp() {
     const nextStatus = resolveBindingStatus(target.managerBinding, context);
     setActionMessage(
       nextStatus === 'bound-current'
-        ? 'この管理画面に接続しました。'
+        ? 'この管理画面にリンクしました。'
         : nextStatus === 'unbound'
-          ? '接続を解除しました。'
+          ? 'リンクを解除しました。'
           : null,
     );
   };

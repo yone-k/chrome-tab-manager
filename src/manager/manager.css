@@ -192,7 +192,20 @@ body {
   border: 1px solid var(--tm-card-border);
   box-shadow: var(--tm-shadow);
   display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  height: clamp(460px, calc(100vh - 210px), 720px);
   gap: 6px;
+}
+
+.manager__card-body {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  align-items: stretch;
 }
 
 .manager__card-header {
@@ -456,6 +469,8 @@ body {
 .manager__block-list {
   display: grid;
   gap: 0;
+  min-height: 0;
+  align-content: start;
 }
 
 .manager__drop-zone {
