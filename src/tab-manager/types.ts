@@ -23,6 +23,9 @@ export type ManagerBinding = {
   managerWindowId: number;
 };
 
+export type ThemeMode = 'system' | 'light' | 'dark';
+export type ResolvedTheme = 'light' | 'dark';
+
 export type HistorySet = {
   id: string;
   name: string;
@@ -41,4 +44,5 @@ export type TabManagerState = {
   exclusions: string[];
   restoreLoadingSuppressionEnabled: boolean;
   removeRestoredTabsEnabled: boolean;
+  themeMode: ThemeMode;
 };

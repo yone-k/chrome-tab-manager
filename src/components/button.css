@@ -22,21 +22,21 @@
 }
 
 .button--primary {
-  background: #0f172a;
-  color: #fff;
+  background: var(--tm-button-primary-bg, #0f172a);
+  color: var(--tm-button-primary-text, #fff);
 }
 
 .button--primary:hover {
-  background: #1e293b;
+  background: var(--tm-button-primary-hover, #1e293b);
 }
 
 .button--ghost {
-  background: #e2e8f0;
-  color: #0f172a;
+  background: var(--tm-button-ghost-bg, #e2e8f0);
+  color: var(--tm-button-ghost-text, #0f172a);
 }
 
 .button--ghost:hover {
-  background: #cbd5f5;
+  background: var(--tm-button-ghost-hover, #cbd5f5);
 }
 
 .button:disabled {
@@ -45,9 +45,9 @@
 }
 
 .button--primary:disabled:hover {
-  background: #0f172a;
+  background: var(--tm-button-primary-bg, #0f172a);
 }
 
 .button--ghost:disabled:hover {
-  background: #e2e8f0;
+  background: var(--tm-button-ghost-bg, #e2e8f0);
 }

@@ -3,6 +3,13 @@ import { useEffect, useState } from 'react';
 import { Button } from '../components/Button';
 import { DEFAULT_EXCLUSIONS, normalizeExclusions } from '../tab-manager/exclusions';
 import { getState, updateState } from '../tab-manager/storage';
+import type { ThemeMode } from '../tab-manager/types';
+import {
+  applyThemeToDocument,
+  getSystemPrefersDark,
+  resolveTheme,
+  subscribeSystemThemeChange,
+} from '../theme/theme';
 import './options.css';
 
 type StatusState = 'idle' | 'saving' | 'saved' | 'error';
@@ -11,6 +18,7 @@ export function OptionsApp() {
   const [exclusionsText, setExclusionsText] = useState('');
   const [restoreLoadingSuppressionEnabled, setRestoreLoadingSuppressionEnabled] = useState(true);
   const [removeRestoredTabsEnabled, setRemoveRestoredTabsEnabled] = useState(true);
+  const [themeMode, setThemeMode] = useState<ThemeMode>('system');
   const [status, setStatus] = useState<StatusState>('idle');
   const [error, setError] = useState<string | null>(null);
 
@@ -25,6 +33,7 @@ export function OptionsApp() {
         setExclusionsText(stored.exclusions.join('\n'));
         setRestoreLoadingSuppressionEnabled(stored.restoreLoadingSuppressionEnabled);
         setRemoveRestoredTabsEnabled(stored.removeRestoredTabsEnabled);
+        setThemeMode(stored.themeMode);
       } catch (err) {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : '設定の読み込みに失敗しました。');
@@ -37,6 +46,21 @@ export function OptionsApp() {
     };
   }, []);
 
+  useEffect(() => {
+    let unsubscribe: (() => void) | undefined;
+    if (themeMode === 'system') {
+      applyThemeToDocument(resolveTheme(themeMode, getSystemPrefersDark()));
+      unsubscribe = subscribeSystemThemeChange((prefersDark) => {
+        applyThemeToDocument(resolveTheme('system', prefersDark));
+      });
+    } else {
+      applyThemeToDocument(resolveTheme(themeMode, false));
+    }
+    return () => {
+      unsubscribe?.();
+    };
+  }, [themeMode]);
+
   const handleSave = async () => {
     setStatus('saving');
     setError(null);
@@ -47,6 +71,7 @@ export function OptionsApp() {
         exclusions: normalized,
         restoreLoadingSuppressionEnabled,
         removeRestoredTabsEnabled,
+        themeMode,
       }));
       setExclusionsText(normalized.join('\n'));
       setStatus('saved');
@@ -66,10 +91,12 @@ export function OptionsApp() {
         exclusions: normalized,
         restoreLoadingSuppressionEnabled: true,
         removeRestoredTabsEnabled: true,
+        themeMode: 'system',
       }));
       setExclusionsText(normalized.join('\n'));
       setRestoreLoadingSuppressionEnabled(true);
       setRemoveRestoredTabsEnabled(true);
+      setThemeMode('system');
       setStatus('saved');
     } catch (err) {
       setStatus('error');
@@ -113,6 +140,52 @@ export function OptionsApp() {
             <span className="options__toggle-label">復元したタブを履歴から削除する</span>
           </label>
         </div>
+      </section>
+
+      <section
+        className="options__section options__section--theme"
+        aria-labelledby="theme-settings"
+      >
+        <h2 id="theme-settings" className="options__section-title">
+          表示設定
+        </h2>
+        <p className="options__section-description">テーマを選択します。</p>
+        <fieldset className="options__radio-group">
+          <legend className="options__label">テーマモード</legend>
+          <label className="options__radio">
+            <input
+              className="options__radio-input"
+              type="radio"
+              name="theme-mode"
+              value="system"
+              checked={themeMode === 'system'}
+              onChange={() => setThemeMode('system')}
+            />
+            <span className="options__radio-label">システム準拠</span>
+          </label>
+          <label className="options__radio">
+            <input
+              className="options__radio-input"
+              type="radio"
+              name="theme-mode"
+              value="light"
+              checked={themeMode === 'light'}
+              onChange={() => setThemeMode('light')}
+            />
+            <span className="options__radio-label">ライト</span>
+          </label>
+          <label className="options__radio">
+            <input
+              className="options__radio-input"
+              type="radio"
+              name="theme-mode"
+              value="dark"
+              checked={themeMode === 'dark'}
+              onChange={() => setThemeMode('dark')}
+            />
+            <span className="options__radio-label">ダーク</span>
+          </label>
+        </fieldset>
       </section>
 
       <section

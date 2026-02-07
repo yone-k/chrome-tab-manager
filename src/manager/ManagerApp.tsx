@@ -33,7 +33,13 @@ import {
 } from '../tab-manager/filters';
 import { normalizeLayout } from '../tab-manager/layout';
 import { getState, STATE_KEY, updateState } from '../tab-manager/storage';
-import type { GroupSnapshot, HistorySet, TabSnapshot } from '../tab-manager/types';
+import type { GroupSnapshot, HistorySet, TabSnapshot, ThemeMode } from '../tab-manager/types';
+import {
+  applyThemeToDocument,
+  getSystemPrefersDark,
+  resolveTheme,
+  subscribeSystemThemeChange,
+} from '../theme/theme';
 import { createUid } from '../tab-manager/uid';
 import { deleteGroupFromHistorySet } from './groupState';
 import {
@@ -1292,6 +1298,7 @@ export function ManagerApp() {
     error?: string;
     restoreLoadingSuppressionEnabled?: boolean;
     removeRestoredTabsEnabled?: boolean;
+    themeMode?: ThemeMode;
   }>({ status: 'loading' });
   const [query, setQuery] = useState('');
   const [setFilter, setSetFilter] = useState(SET_FILTER_ALL);
@@ -1325,6 +1332,7 @@ export function ManagerApp() {
           data: stored.historySets,
           restoreLoadingSuppressionEnabled: stored.restoreLoadingSuppressionEnabled,
           removeRestoredTabsEnabled: stored.removeRestoredTabsEnabled,
+          themeMode: stored.themeMode,
         });
       } catch (err) {
         if (!cancelled) {
@@ -1351,6 +1359,22 @@ export function ManagerApp() {
       chrome.storage.onChanged.removeListener(handleChange);
     };
   }, []);
+
+  const themeMode = state.themeMode ?? 'system';
+  useEffect(() => {
+    let unsubscribe: (() => void) | undefined;
+    if (themeMode === 'system') {
+      applyThemeToDocument(resolveTheme(themeMode, getSystemPrefersDark()));
+      unsubscribe = subscribeSystemThemeChange((prefersDark) => {
+        applyThemeToDocument(resolveTheme('system', prefersDark));
+      });
+    } else {
+      applyThemeToDocument(resolveTheme(themeMode, false));
+    }
+    return () => {
+      unsubscribe?.();
+    };
+  }, [themeMode]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1463,6 +1487,7 @@ export function ManagerApp() {
       data: nextSets,
       restoreLoadingSuppressionEnabled: current.restoreLoadingSuppressionEnabled ?? true,
       removeRestoredTabsEnabled: current.removeRestoredTabsEnabled ?? true,
+      themeMode: current.themeMode ?? 'system',
     }));
   };
 

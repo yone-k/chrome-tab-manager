@@ -45,6 +45,21 @@ describe('storage', () => {
 
     expect(state.restoreLoadingSuppressionEnabled).toBe(true);
     expect(state.removeRestoredTabsEnabled).toBe(true);
+    expect(state.themeMode).toBe('system');
+  });
+
+  it('themeMode の不正値は system に正規化する', async () => {
+    const storage = createMemoryStorage({
+      tabManagerState: {
+        version: 1,
+        historySets: [],
+        exclusions: [],
+        themeMode: 'unknown',
+      },
+    });
+
+    const state = await getState(storage);
+    expect(state.themeMode).toBe('system');
   });
 
   it('setState で状態を永続化する', async () => {
@@ -70,6 +85,18 @@ describe('storage', () => {
     const state = await getState(storage);
 
     expect(state).toEqual(nextState);
+  });
+
+  it('updateState で themeMode を保持できる', async () => {
+    const storage = createMemoryStorage();
+    const updated = await updateState(storage, (state) => ({
+      ...state,
+      themeMode: 'dark',
+    }));
+
+    expect(updated.themeMode).toBe('dark');
+    const persisted = await getState(storage);
+    expect(persisted.themeMode).toBe('dark');
   });
 
   it('正規化を伴う関数更新に対応する', async () => {

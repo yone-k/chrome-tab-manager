@@ -1,6 +1,6 @@
 import { DEFAULT_EXCLUSIONS, normalizeExclusions } from './exclusions';
 import { formatHistorySetNameFromCreatedAt, normalizeManualHistorySetName } from './history';
-import type { HistorySet, TabManagerState } from './types';
+import type { HistorySet, TabManagerState, ThemeMode } from './types';
 import { normalizeLayout } from './layout';
 import { createUid } from './uid';
 
@@ -18,6 +18,7 @@ export function getDefaultState(): TabManagerState {
     exclusions: normalizeExclusions(DEFAULT_EXCLUSIONS),
     restoreLoadingSuppressionEnabled: true,
     removeRestoredTabsEnabled: true,
+    themeMode: 'system',
   };
 }
 
@@ -98,6 +99,13 @@ function normalizeLocked(value: unknown) {
   return false;
 }
 
+function normalizeThemeMode(value: unknown): ThemeMode {
+  if (value === 'light' || value === 'dark' || value === 'system') {
+    return value;
+  }
+  return 'system';
+}
+
 function normalizeHistorySets(rawSets: unknown): HistorySet[] {
   if (!Array.isArray(rawSets)) {
     return [];
@@ -167,6 +175,7 @@ function coerceState(raw: unknown): TabManagerState {
       typeof raw.removeRestoredTabsEnabled === 'boolean'
         ? raw.removeRestoredTabsEnabled
         : defaults.removeRestoredTabsEnabled,
+    themeMode: normalizeThemeMode(raw.themeMode),
   };
 }
 
@@ -242,6 +251,7 @@ export async function prependHistorySet(
       typeof rawState.removeRestoredTabsEnabled === 'boolean'
         ? rawState.removeRestoredTabsEnabled
         : defaults.removeRestoredTabsEnabled,
+    themeMode: normalizeThemeMode(rawState.themeMode),
     historySets: nextHistorySets,
   };
   await storage.set({ [STATE_KEY]: nextRawState });
