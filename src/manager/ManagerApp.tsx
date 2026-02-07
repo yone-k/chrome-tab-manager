@@ -88,22 +88,111 @@ const SET_LIST_GAP_PX = 10;
 const BLOCK_LIST_GAP_PX = 10;
 const TAB_LIST_GAP_PX = 6;
 
+function getDistanceToRectSquared(
+  pointer: { x: number; y: number },
+  rect: { left: number; right: number; top: number; bottom: number },
+) {
+  const dx =
+    pointer.x < rect.left
+      ? rect.left - pointer.x
+      : pointer.x > rect.right
+        ? pointer.x - rect.right
+        : 0;
+  const dy =
+    pointer.y < rect.top
+      ? rect.top - pointer.y
+      : pointer.y > rect.bottom
+        ? pointer.y - rect.bottom
+        : 0;
+  return dx * dx + dy * dy;
+}
+
 const collisionDetection: CollisionDetection = (args) => {
-  const pointerCollisions = pointerWithin(args);
-  if (pointerCollisions.length > 0) {
-    let smallestCollision = pointerCollisions[0];
-    let smallestArea = Number.POSITIVE_INFINITY;
-    for (const collision of pointerCollisions) {
-      const rect = collision.data?.droppableContainer?.rect.current;
-      const area = rect ? rect.width * rect.height : Number.POSITIVE_INFINITY;
-      if (area < smallestArea) {
-        smallestArea = area;
-        smallestCollision = collision;
+  const activeId = String(args.active.id);
+  const dragItem = resolveDragItem(args.active.data.current, activeId);
+  const isSetDrag = dragItem?.type === 'set';
+  const droppableContainers = dragItem
+    ? args.droppableContainers.filter((container) => {
+        const dropData = container.data.current;
+        return isDropItemPayload(dropData) && isDropItemCompatible(dragItem, dropData.dropItem);
+      })
+    : args.droppableContainers;
+
+  if (droppableContainers.length === 0) {
+    return [];
+  }
+
+  if (isSetDrag && args.pointerCoordinates) {
+    const pointer = args.pointerCoordinates;
+    let nearestContainer: (typeof droppableContainers)[number] | null = null;
+    let nearestDistance = Number.POSITIVE_INFINITY;
+
+    for (const container of droppableContainers) {
+      const rect = container.rect.current;
+      const distance =
+        rect === null
+          ? Number.POSITIVE_INFINITY
+          : getDistanceToRectSquared(pointer, {
+              left: rect.left,
+              right: rect.right,
+              top: rect.top,
+              bottom: rect.bottom,
+            });
+      if (distance < nearestDistance) {
+        nearestDistance = distance;
+        nearestContainer = container;
       }
     }
-    return [smallestCollision];
+
+    if (nearestContainer && Number.isFinite(nearestDistance)) {
+      return [
+        {
+          id: nearestContainer.id,
+          data: {
+            droppableContainer: nearestContainer,
+            value: nearestDistance,
+          },
+        },
+      ];
+    }
   }
-  return closestCenter(args);
+
+  const pointerCollisions = pointerWithin({
+    ...args,
+    droppableContainers,
+  });
+  if (pointerCollisions.length > 0) {
+    const pointer = args.pointerCoordinates;
+    const selectDistance = (collision: (typeof pointerCollisions)[number]) => {
+      if (!pointer) {
+        return Number.POSITIVE_INFINITY;
+      }
+      const rect = collision.data?.droppableContainer?.rect.current;
+      if (!rect) {
+        return Number.POSITIVE_INFINITY;
+      }
+      const centerX = rect.left + rect.width / 2;
+      const centerY = rect.top + rect.height / 2;
+      const dx = centerX - pointer.x;
+      const dy = centerY - pointer.y;
+      return dx * dx + dy * dy;
+    };
+    let nearestCollision = pointerCollisions[0];
+    let nearestDistance = Number.POSITIVE_INFINITY;
+    for (const collision of pointerCollisions) {
+      const distance = selectDistance(collision);
+      if (distance < nearestDistance) {
+        nearestDistance = distance;
+        nearestCollision = collision;
+      }
+    }
+    return [nearestCollision];
+  }
+  const centerCollisions = closestCenter({
+    ...args,
+    droppableContainers,
+  });
+  return centerCollisions;
 };
 
 type DropZoneProps = {
@@ -112,6 +201,8 @@ type DropZoneProps = {
   activeDrop: ActiveDrop | null;
   dropGapPx: number;
   baseGapPx: number;
+  axis?: 'vertical' | 'horizontal';
+  placement?: 'left' | 'right';
   reorderEnabled: boolean;
 };
 
@@ -121,6 +212,8 @@ function DropZone({
   activeDrop,
   dropGapPx,
   baseGapPx,
+  axis = 'vertical',
+  placement,
   reorderEnabled,
 }: DropZoneProps) {
   const { setNodeRef } = useDroppable({
@@ -129,12 +222,20 @@ function DropZone({
     disabled: !reorderEnabled,
   });
   const isActive = activeDrop?.overId === id;
-  const height = isActive ? dropGapPx : baseGapPx;
+  const style =
+    axis === 'horizontal'
+      ? {
+          width: 0,
+          height: '100%',
+        }
+      : { height: isActive ? dropGapPx : baseGapPx };
   return (
     <div
       ref={setNodeRef}
-      className={`manager__drop-zone${isActive ? ' manager__drop-zone--active' : ''}`}
-      style={{ height }}
+      className={`manager__drop-zone manager__drop-zone--${axis}${
+        axis === 'horizontal' && placement ? ` manager__drop-zone--${placement}` : ''
+      }${isActive ? ' manager__drop-zone--active' : ''}`}
+      style={style}
     />
   );
 }
@@ -254,6 +355,42 @@ function isDragData(value: unknown): value is DragData {
   return isRecord(value) && typeof value.dragLabel === 'string' && isDragItem(value.dragItem);
 }
 
+function parseSetDragItemFromActiveId(activeId: string): DragItem | null {
+  if (!activeId.startsWith('set:')) {
+    return null;
+  }
+  const setId = activeId.slice(4);
+  if (!setId) {
+    return null;
+  }
+  return { type: 'set', setId };
+}
+
+function resolveDragItem(value: unknown, activeId: string): DragItem | null {
+  if (isDragData(value)) {
+    return value.dragItem;
+  }
+  return parseSetDragItemFromActiveId(activeId);
+}
+
+function resolveDragData(
+  value: unknown,
+  activeId: string,
+  fallback: DragData | null,
+): DragData | null {
+  if (isDragData(value)) {
+    return value;
+  }
+  const parsed = parseSetDragItemFromActiveId(activeId);
+  if (parsed) {
+    return {
+      dragItem: parsed,
+      dragLabel: fallback?.dragLabel ?? '',
+    };
+  }
+  return fallback;
+}
+
 function isDropItemData(value: unknown): value is DropItemData {
   if (!isRecord(value)) {
     return false;
@@ -276,6 +413,19 @@ function isDropItemData(value: unknown): value is DropItemData {
 
 function isDropItemPayload(value: unknown): value is { dropItem: DropItemData } {
   return isRecord(value) && isDropItemData(value.dropItem);
+}
+
+function isDropItemCompatible(dragItem: DragItem, dropItem: DropItemData) {
+  if (dragItem.type === 'set') {
+    return dropItem.type === 'set-zone';
+  }
+  if (dragItem.type === 'group') {
+    return dropItem.type === 'block-zone';
+  }
+  if (dragItem.type === 'tab') {
+    return dropItem.type === 'block-zone' || dropItem.type === 'tab-zone';
+  }
+  return false;
 }
 
 type BodyScrollLockState = {
@@ -301,6 +451,22 @@ function getDragSourceHeight(event: Event | null) {
   }
   const height = source.getBoundingClientRect().height;
   return height > 0 ? height : null;
+}
+
+function getDragSourceWidth(event: Event | null) {
+  if (!event) {
+    return null;
+  }
+  const target = event.target;
+  if (!(target instanceof Element)) {
+    return null;
+  }
+  const source = target.closest('.manager__set-grid-item');
+  if (!source) {
+    return null;
+  }
+  const width = source.getBoundingClientRect().width;
+  return width > 0 ? width : null;
 }
 
 function buildDropTarget(dropItem: DropItemData): DropTarget {
@@ -1308,6 +1474,7 @@ export function ManagerApp() {
   const [activeDrag, setActiveDrag] = useState<DragData | null>(null);
   const [activeDrop, setActiveDrop] = useState<ActiveDrop | null>(null);
   const [dropGapPx, setDropGapPx] = useState(DEFAULT_DROP_GAP_PX);
+  const [setDropWidthPx, setSetDropWidthPx] = useState(0);
   const [dragSpacerPx, setDragSpacerPx] = useState(0);
   const [editingSetId, setEditingSetId] = useState<string | null>(null);
   const dragLatestScrollYRef = useRef<number | null>(null);
@@ -1480,6 +1647,30 @@ export function ManagerApp() {
     });
   }, [activeGroupFilter, query, setFilter, state]);
   const visibleSets = reorderEnabled ? fullSets : filteredSets;
+  const activeSetDragId = activeDrag?.dragItem.type === 'set' ? activeDrag.dragItem.setId : null;
+  const activeSetDragIndex =
+    activeSetDragId === null ? -1 : visibleSets.findIndex((set) => set.id === activeSetDragId);
+  const renderSets =
+    activeSetDragIndex >= 0 ? visibleSets.filter((set) => set.id !== activeSetDragId) : visibleSets;
+  const activeSetDropRenderIndex = useMemo(() => {
+    if (activeDrag?.dragItem.type !== 'set') {
+      return null;
+    }
+    if (!activeDrop || activeDrop.dropItem.type !== 'set-zone') {
+      return null;
+    }
+    if (activeSetDragIndex === -1) {
+      return null;
+    }
+    const dropIndex = activeDrop.dropItem.index;
+    return dropIndex <= activeSetDragIndex ? dropIndex : dropIndex - 1;
+  }, [activeDrag, activeDrop, activeSetDragIndex]);
+  const resolveSetDropIndex = (index: number) => {
+    if (activeSetDragIndex === -1) {
+      return index;
+    }
+    return index <= activeSetDragIndex ? index : index + 1;
+  };
 
   const refreshState = async (nextSets: HistorySet[]) => {
     setState((current) => ({
@@ -1538,10 +1729,13 @@ export function ManagerApp() {
     }
     lockBodyScroll();
     dragLatestScrollYRef.current = window.scrollY;
-    const data = event.active.data.current;
-    if (!isDragData(data)) {
+    const activeId = String(event.active.id);
+    const rawData = event.active.data.current;
+    const data = resolveDragData(rawData, activeId, activeDrag);
+    if (!data) {
       setDropGapPx(DEFAULT_DROP_GAP_PX);
       setDragSpacerPx(0);
+      setSetDropWidthPx(0);
       unlockBodyScroll();
       return;
     }
@@ -1551,7 +1745,9 @@ export function ManagerApp() {
       rectInitialHeight: rect?.initial?.height ?? null,
       rectTranslatedHeight: rect?.translated?.height ?? null,
     });
+    const width = getDragSourceWidth(event.activatorEvent) ?? rect?.initial?.width ?? null;
     setDropGapPx(computeDropGapPx(height));
+    setSetDropWidthPx(data.dragItem.type === 'set' && width !== null ? width : 0);
     setDragSpacerPx(height ?? 0);
     setActiveDrag(data);
     setActiveDrop(null);
@@ -1562,9 +1758,20 @@ export function ManagerApp() {
       return;
     }
     dragLatestScrollYRef.current = window.scrollY;
+    const activeId = String(event.active.id);
+    const data = event.active.data.current;
+    const dragData = resolveDragData(data, activeId, activeDrag);
+    if (!dragData) {
+      setActiveDrop(null);
+      return;
+    }
     const over = event.over;
     const dropData = over?.data.current;
     if (!over || !isDropItemPayload(dropData)) {
+      setActiveDrop(null);
+      return;
+    }
+    if (!isDropItemCompatible(dragData.dragItem, dropData.dropItem)) {
       setActiveDrop(null);
       return;
     }
@@ -1581,6 +1788,7 @@ export function ManagerApp() {
     setActiveDrop(null);
     dragLatestScrollYRef.current = null;
     setDropGapPx(DEFAULT_DROP_GAP_PX);
+    setSetDropWidthPx(0);
     setDragSpacerPx(0);
     unlockBodyScroll();
   };
@@ -1591,17 +1799,19 @@ export function ManagerApp() {
       setActiveDrop(null);
       dragLatestScrollYRef.current = null;
       setDropGapPx(DEFAULT_DROP_GAP_PX);
+      setSetDropWidthPx(0);
       setDragSpacerPx(0);
       unlockBodyScroll();
       return;
     }
-    const data = event.active.data.current;
+    const data = resolveDragData(event.active.data.current, String(event.active.id), activeDrag);
     const dropTarget = activeDrop?.dropTarget ?? null;
-    if (!isDragData(data) || !dropTarget) {
+    if (!data || !dropTarget) {
       setActiveDrag(null);
       setActiveDrop(null);
       dragLatestScrollYRef.current = null;
       setDropGapPx(DEFAULT_DROP_GAP_PX);
+      setSetDropWidthPx(0);
       setDragSpacerPx(0);
       unlockBodyScroll();
       return;
@@ -1617,6 +1827,7 @@ export function ManagerApp() {
       setActiveDrop(null);
       dragLatestScrollYRef.current = null;
       setDropGapPx(DEFAULT_DROP_GAP_PX);
+      setSetDropWidthPx(0);
       setDragSpacerPx(0);
       unlockBodyScroll();
       return;
@@ -1632,6 +1843,7 @@ export function ManagerApp() {
     const scrollY = dragLatestScrollYRef.current;
     dragLatestScrollYRef.current = null;
     setDropGapPx(DEFAULT_DROP_GAP_PX);
+    setSetDropWidthPx(0);
     setDragSpacerPx(0);
     unlockBodyScroll();
     if (scrollY !== null) {
@@ -2104,16 +2316,10 @@ export function ManagerApp() {
           {visibleSets.length === 0 ? (
             <p className="manager__empty">現在のフィルタに一致するタブがありません。</p>
           ) : (
-            <>
-              <DropZone
-                id="zone:set:0"
-                dropItem={{ type: 'set-zone', index: 0 }}
-                activeDrop={activeDrop}
-                dropGapPx={dropGapPx}
-                baseGapPx={SET_LIST_GAP_PX}
-                reorderEnabled={reorderEnabled}
-              />
-              {visibleSets.map((set, setIndex) => {
+            <div className="manager__set-grid">
+              {renderSets.map((set, renderIndex) => {
+                const leftDropIndex = resolveSetDropIndex(renderIndex);
+                const rightDropIndex = resolveSetDropIndex(renderIndex + 1);
                 const fullSet = fullSets.find((item) => item.id === set.id);
                 const bindingStatus = resolveBindingStatus(
                   set.managerBinding,
@@ -2130,50 +2336,79 @@ export function ManagerApp() {
                 const handleToggleTabLockForSet = (tab: TabSnapshot) => {
                   void handleToggleTabLock(set.id, tab.uid);
                 };
+                const shouldShowDropPlaceholder = activeSetDropRenderIndex === renderIndex;
 
                 return (
                   <Fragment key={set.id}>
-                    <SetCard
-                      set={set}
-                      fullSet={fullSet}
-                      bindingStatus={bindingStatus}
-                      bindingToggleDisabled={bindingToggleDisabled}
-                      reorderEnabled={reorderEnabled}
-                      shouldStartEditing={editingSetId === set.id}
-                      onStartEditingHandled={() => {
-                        if (editingSetId === set.id) {
-                          setEditingSetId(null);
+                    {shouldShowDropPlaceholder ? (
+                      <div
+                        className="manager__set-drop-placeholder"
+                        style={setDropWidthPx > 0 ? { width: setDropWidthPx } : undefined}
+                        aria-hidden="true"
+                      />
+                    ) : null}
+                    <div className="manager__set-grid-item">
+                      <DropZone
+                        id={`zone:set:${leftDropIndex}:left`}
+                        dropItem={{ type: 'set-zone', index: leftDropIndex }}
+                        activeDrop={activeDrop}
+                        dropGapPx={dropGapPx}
+                        baseGapPx={SET_LIST_GAP_PX}
+                        axis="horizontal"
+                        placement="left"
+                        reorderEnabled={reorderEnabled}
+                      />
+                      <SetCard
+                        set={set}
+                        fullSet={fullSet}
+                        bindingStatus={bindingStatus}
+                        bindingToggleDisabled={bindingToggleDisabled}
+                        reorderEnabled={reorderEnabled}
+                        shouldStartEditing={editingSetId === set.id}
+                        onStartEditingHandled={() => {
+                          if (editingSetId === set.id) {
+                            setEditingSetId(null);
+                          }
+                        }}
+                        onRestoreSet={() => handleRestoreSet(set)}
+                        onDeleteSet={() => handleDeleteSet(set.id)}
+                        onToggleSetLock={() => handleToggleSetLock(set.id)}
+                        onToggleBinding={() => handleToggleManagerBinding(set.id)}
+                        onRenameSet={(title) => handleRenameSet(set.id, title)}
+                        onRestoreGroup={(groupId) => handleRestoreGroup(set, groupId)}
+                        onRenameGroup={(groupUid, title) =>
+                          handleRenameGroup(set.id, groupUid, title)
                         }
-                      }}
-                      onRestoreSet={() => handleRestoreSet(set)}
-                      onDeleteSet={() => handleDeleteSet(set.id)}
-                      onToggleSetLock={() => handleToggleSetLock(set.id)}
-                      onToggleBinding={() => handleToggleManagerBinding(set.id)}
-                      onRenameSet={(title) => handleRenameSet(set.id, title)}
-                      onRestoreGroup={(groupId) => handleRestoreGroup(set, groupId)}
-                      onRenameGroup={(groupUid, title) =>
-                        handleRenameGroup(set.id, groupUid, title)
-                      }
-                      onDeleteGroup={(groupUid) => handleDeleteGroup(set.id, groupUid)}
-                      onToggleGroupLock={handleToggleGroupLockForSet}
-                      onCreateGroup={() => handleCreateGroup(set.id)}
-                      onToggleTabLock={handleToggleTabLockForSet}
-                      rowActions={rowActions}
-                      activeDrop={activeDrop}
-                      dropGapPx={dropGapPx}
-                    />
-                    <DropZone
-                      id={`zone:set:${setIndex + 1}`}
-                      dropItem={{ type: 'set-zone', index: setIndex + 1 }}
-                      activeDrop={activeDrop}
-                      dropGapPx={dropGapPx}
-                      baseGapPx={SET_LIST_GAP_PX}
-                      reorderEnabled={reorderEnabled}
-                    />
+                        onDeleteGroup={(groupUid) => handleDeleteGroup(set.id, groupUid)}
+                        onToggleGroupLock={handleToggleGroupLockForSet}
+                        onCreateGroup={() => handleCreateGroup(set.id)}
+                        onToggleTabLock={handleToggleTabLockForSet}
+                        rowActions={rowActions}
+                        activeDrop={activeDrop}
+                        dropGapPx={dropGapPx}
+                      />
+                      <DropZone
+                        id={`zone:set:${rightDropIndex}:right`}
+                        dropItem={{ type: 'set-zone', index: rightDropIndex }}
+                        activeDrop={activeDrop}
+                        dropGapPx={dropGapPx}
+                        baseGapPx={SET_LIST_GAP_PX}
+                        axis="horizontal"
+                        placement="right"
+                        reorderEnabled={reorderEnabled}
+                      />
+                    </div>
                   </Fragment>
                 );
               })}
-            </>
+              {activeSetDropRenderIndex === renderSets.length ? (
+                <div
+                  className="manager__set-drop-placeholder"
+                  style={setDropWidthPx > 0 ? { width: setDropWidthPx } : undefined}
+                  aria-hidden="true"
+                />
+              ) : null}
+            </div>
           )}
         </main>
       </div>

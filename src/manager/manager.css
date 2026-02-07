@@ -76,9 +76,8 @@ body {
 }
 
 .manager {
-  width: min(100%, 1200px);
-  max-width: 1200px;
-  margin: 0 auto;
+  width: 100%;
+  margin: 0;
   display: grid;
   gap: 8px;
 }
@@ -159,6 +158,29 @@ body {
 .manager__content {
   display: grid;
   gap: 0;
+  align-items: start;
+}
+
+.manager__set-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+  gap: 6px;
+  align-items: start;
+}
+
+.manager__set-grid-item {
+  position: relative;
+  min-width: 0;
+}
+
+.manager__set-grid-item > .manager__card {
+  min-width: 0;
+}
+
+.manager__set-drop-placeholder {
+  width: 100%;
+  min-width: 0;
+  min-height: 120px;
 }
 
 .manager__card {
@@ -438,6 +460,43 @@ body {
   height: 1px;
 }
 
+.manager__drop-zone--vertical {
+  width: 100%;
+}
+
+.manager__drop-zone--horizontal {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 0;
+  overflow: visible;
+  z-index: 4;
+  pointer-events: none;
+  opacity: 0;
+  transition:
+    width 0.14s ease,
+    opacity 0.14s ease;
+}
+
+.manager__drop-zone--horizontal.manager__drop-zone--left {
+  left: 0;
+  transform: translateX(-100%);
+}
+
+.manager__drop-zone--horizontal.manager__drop-zone--right {
+  right: 0;
+  transform: translateX(100%);
+}
+
+.manager__drop-zone--horizontal:not(.manager__drop-zone--active) {
+  padding-inline: 14px;
+  margin-inline: -14px;
+}
+
+.manager__drop-zone--horizontal.manager__drop-zone--active {
+  opacity: 1;
+}
+
 .drag-handle {
   width: 20px;
   height: 20px;
@@ -454,6 +513,8 @@ body {
   flex-shrink: 0;
   justify-self: start;
   align-self: center;
+  position: relative;
+  z-index: 5;
 }
 
 .drag-handle::before {
