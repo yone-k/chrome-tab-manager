@@ -45,6 +45,7 @@ import { cleanupHistorySet } from './restoreCleanup';
 import { shouldSuppressRestoreLoading } from './restorePolicy';
 import { resolveRestoreTarget } from './restoreTarget';
 import { removeSetsEmptiedSince } from './setCleanup';
+import { matchesExpectedUrl } from './urlMatch';
 import {
   getBindingStatusLabel,
   resolveBindingStatus,
@@ -1106,24 +1107,14 @@ async function discardTab(tabId: number) {
   return new Promise<void>((resolve) => {
     chrome.tabs.discard(tabId, () => {
       if (chrome.runtime.lastError) {
-        console.error('Failed to discard tab', chrome.runtime.lastError);
+        console.warn('Failed to discard tab (non-blocking)', chrome.runtime.lastError);
       }
       resolve();
     });
   });
 }
 
-function matchesExpectedUrl(
-  expectedUrl: string,
-  tab: chrome.tabs.Tab,
-  changeInfo?: chrome.tabs.TabChangeInfo,
-) {
-  const candidates = [changeInfo?.url, tab.url].filter((value): value is string => Boolean(value));
-
-  return candidates.some((value) => value === expectedUrl);
-}
-
-async function waitForTabUrl(tabId: number, expectedUrl: string, timeoutMs = 1000) {
+async function waitForTabUrl(tabId: number, expectedUrl: string, timeoutMs = 3000) {
   return new Promise<boolean>((resolve) => {
     let settled = false;
     const finish = (matched: boolean) => {
@@ -1150,7 +1141,7 @@ async function waitForTabUrl(tabId: number, expectedUrl: string, timeoutMs = 100
     };
 
     const timeoutId = setTimeout(() => {
-      console.error('Discard wait timeout reached', { tabId, expectedUrl });
+      console.debug('Discard wait timeout reached', { tabId, expectedUrl, timeoutMs });
       finish(false);
     }, timeoutMs);
 
@@ -1275,7 +1266,7 @@ async function restoreTabs(
         }
         const matched = await waitForTabUrl(tab.id, snapshot.url);
         if (!matched) {
-          console.error('Failed to confirm tab url before discard', {
+          console.warn('Skip discard because tab url confirmation failed', {
             tabId: tab.id,
             expectedUrl: snapshot.url,
           });
