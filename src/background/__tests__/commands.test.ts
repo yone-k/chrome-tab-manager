@@ -265,6 +265,185 @@ describe('background commands', () => {
     expect(state.historySets[0]?.tabs).toHaveLength(2);
   });
 
+  it('新規保存時に既存履歴のロック状態を保持する', async () => {
+    const lockedExistingSet = {
+      id: 'locked-existing',
+      name: 'locked-window',
+      createdAt: 1,
+      windowId: 99,
+      locked: true,
+      managerBinding: null,
+      groups: [
+        { uid: 'g-locked', id: 101, title: 'locked-group', color: 'blue', index: 0, locked: true },
+      ],
+      tabs: [
+        {
+          uid: 't-locked',
+          title: 'locked-tab',
+          url: 'https://locked.example.com',
+          index: 0,
+          groupId: 101,
+          locked: true,
+        },
+      ],
+      layout: [{ type: 'group' as const, uid: 'g-locked' }],
+    };
+    const mock = installChromeMock({
+      tabs: [
+        {
+          id: 1,
+          windowId: 10,
+          index: 0,
+          active: true,
+          pinned: false,
+          url: 'https://a.example.com',
+          title: 'A',
+        },
+      ],
+      groups: [],
+      initialHistorySets: [lockedExistingSet],
+    });
+
+    await runSaveAndCloseCurrentWindow();
+
+    const state = mock.storageData.tabManagerState as {
+      historySets: Array<{
+        id: string;
+        locked: boolean;
+        groups: Array<{ uid: string; locked: boolean }>;
+        tabs: Array<{ uid: string; locked: boolean }>;
+      }>;
+    };
+    const existing = state.historySets.find((set) => set.id === 'locked-existing');
+    expect(existing?.locked).toBe(true);
+    expect(existing?.groups.find((group) => group.uid === 'g-locked')?.locked).toBe(true);
+    expect(existing?.tabs.find((tab) => tab.uid === 't-locked')?.locked).toBe(true);
+  });
+
+  it('新規保存時に既存履歴の全タブロック状態から親ロックを維持する', async () => {
+    const existingSet = {
+      id: 'existing-all-tabs-locked',
+      name: 'window',
+      createdAt: 1,
+      windowId: 1,
+      locked: false,
+      managerBinding: null,
+      groups: [{ uid: 'g-1', id: 1, title: 'group', color: 'blue', index: 0, locked: false }],
+      tabs: [
+        {
+          uid: 't-1',
+          title: 'tab-1',
+          url: 'https://tab1.example.com',
+          index: 0,
+          groupId: 1,
+          locked: true,
+        },
+        {
+          uid: 't-2',
+          title: 'tab-2',
+          url: 'https://tab2.example.com',
+          index: 1,
+          groupId: null,
+          locked: true,
+        },
+      ],
+      layout: [{ type: 'group' as const, uid: 'g-1' }],
+    };
+    const mock = installChromeMock({
+      tabs: [
+        {
+          id: 1,
+          windowId: 10,
+          index: 0,
+          active: true,
+          pinned: false,
+          url: 'https://a.example.com',
+          title: 'A',
+        },
+      ],
+      groups: [],
+      initialHistorySets: [existingSet],
+    });
+
+    await runSaveAndCloseCurrentWindow();
+
+    const state = mock.storageData.tabManagerState as {
+      historySets: Array<{
+        id: string;
+        locked: boolean;
+        groups: Array<{ uid: string; locked: boolean }>;
+      }>;
+    };
+    const existing = state.historySets.find((set) => set.id === 'existing-all-tabs-locked');
+    expect(existing?.locked).toBe(true);
+    expect(existing?.groups.find((group) => group.uid === 'g-1')?.locked).toBe(true);
+  });
+
+  it('新規保存時に非対象セットのロック情報を変更しない', async () => {
+    const untouchedSet = {
+      id: 'existing-untouched',
+      name: 'window',
+      createdAt: 1,
+      windowId: 1,
+      locked: false,
+      managerBinding: null,
+      groups: [{ uid: 'g-1', id: 1, title: 'group', color: 'blue', index: 0, locked: true }],
+      tabs: [
+        {
+          uid: 't-1',
+          title: 'tab-1',
+          url: 'https://tab1.example.com',
+          index: 0,
+          groupId: 1,
+          locked: true,
+        },
+        {
+          uid: 't-2',
+          title: 'tab-2',
+          url: 'https://tab2.example.com',
+          index: 1,
+          groupId: null,
+          locked: false,
+        },
+      ],
+      layout: [{ type: 'group' as const, uid: 'g-1' }],
+    };
+    const mock = installChromeMock({
+      tabs: [
+        {
+          id: 1,
+          windowId: 10,
+          index: 0,
+          active: true,
+          pinned: false,
+          url: 'https://a.example.com',
+          title: 'A',
+        },
+      ],
+      groups: [],
+      initialHistorySets: [untouchedSet],
+    });
+
+    await runSaveAndCloseCurrentWindow();
+
+    const state = mock.storageData.tabManagerState as {
+      historySets: Array<{
+        id: string;
+        locked: boolean;
+        groups: Array<{ uid: string; locked: boolean }>;
+        tabs: Array<{ uid: string; locked: boolean }>;
+      }>;
+    };
+    const existing = state.historySets.find((set) => set.id === untouchedSet.id);
+    expect(existing?.locked).toBe(untouchedSet.locked);
+    expect(existing?.groups.map((group) => ({ uid: group.uid, locked: group.locked }))).toEqual(
+      untouchedSet.groups.map((group) => ({ uid: group.uid, locked: group.locked })),
+    );
+    expect(existing?.tabs.map((tab) => ({ uid: tab.uid, locked: tab.locked }))).toEqual(
+      untouchedSet.tabs.map((tab) => ({ uid: tab.uid, locked: tab.locked })),
+    );
+  });
+
   it('今開いているタブを閉じるはアクティブタブ1件のみ保存して閉じる', async () => {
     const mock = installChromeMock({
       tabs: [

@@ -6,7 +6,7 @@ import {
   type GroupInput,
   type TabInput,
 } from '../tab-manager/history';
-import { getState, updateState } from '../tab-manager/storage';
+import { getState, prependHistorySet } from '../tab-manager/storage';
 import {
   ensureManagerTabInWindow,
   filterOutManagerTabs,
@@ -105,6 +105,7 @@ async function saveTabsAndClose(
   activeTab: chrome.tabs.Tab | null,
 ) {
   const stored = await getState();
+
   const managerUrl = chrome.runtime.getURL('manager.html');
   const savableTabs = filterOutManagerTabs(
     filterSavableTabs(sourceTabs, stored.exclusions),
@@ -144,10 +145,7 @@ async function saveTabsAndClose(
     groups: groupInputs,
   });
 
-  await updateState((state) => ({
-    ...state,
-    historySets: [historySet, ...state.historySets].slice(0, MAX_HISTORY_SETS),
-  }));
+  await prependHistorySet(historySet, MAX_HISTORY_SETS);
 
   const tabIds = savableTabs
     .map((tab) => tab.id)

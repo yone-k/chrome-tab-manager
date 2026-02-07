@@ -150,6 +150,31 @@ describe('cleanupHistorySet', () => {
     expect(result.tabs.map((tab) => tab.uid)).toContain('t-1');
   });
 
+  it('復元後に残ったタブが全ロックならグループとセットをロック状態へ同期する', () => {
+    const setWithMixedLocks: HistorySet = {
+      ...sampleSet,
+      locked: false,
+      groups: sampleSet.groups.map((group) =>
+        group.uid === 'g-1' ? { ...group, locked: false } : group,
+      ),
+      tabs: sampleSet.tabs.map((tab) =>
+        tab.uid === 't-1'
+          ? { ...tab, locked: true }
+          : tab.uid === 't-2'
+            ? { ...tab, locked: false }
+            : { ...tab, locked: true },
+      ),
+    };
+    const restored = [setWithMixedLocks.tabs.find((tab) => tab.uid === 't-2')!];
+
+    const result = cleanupHistorySet(setWithMixedLocks, restored, {
+      pruneEmptyGroups: true,
+    });
+
+    expect(result.groups.find((group) => group.uid === 'g-1')?.locked).toBe(true);
+    expect(result.locked).toBe(true);
+  });
+
   it('pruneEmptyGroups=true でもロックされたグループは残す', () => {
     const setWithLockedGroup: HistorySet = {
       ...sampleSet,

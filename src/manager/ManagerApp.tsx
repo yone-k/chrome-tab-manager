@@ -35,10 +35,11 @@ import type { GroupSnapshot, HistorySet, TabSnapshot } from '../tab-manager/type
 import { createUid } from '../tab-manager/uid';
 import { deleteGroupFromHistorySet } from './groupState';
 import {
-  applyGroupLock,
   applySetLock,
   isGroupEffectivelyLocked,
   isTabEffectivelyLocked,
+  toggleGroupLockWithPropagation,
+  toggleTabLockWithPropagation,
 } from './lockState';
 import { cleanupHistorySet } from './restoreCleanup';
 import { shouldSuppressRestoreLoading } from './restorePolicy';
@@ -317,18 +318,9 @@ type TabRowProps = {
   rowActions: TabRowActions;
   locked: boolean;
   onToggleLock: (tab: TabSnapshot) => void;
-  lockToggleDisabled: boolean;
 };
 
-function TabRow({
-  tab,
-  setId,
-  reorderEnabled,
-  rowActions,
-  locked,
-  onToggleLock,
-  lockToggleDisabled,
-}: TabRowProps) {
+function TabRow({ tab, setId, reorderEnabled, rowActions, locked, onToggleLock }: TabRowProps) {
   const {
     setNodeRef: setDragRef,
     attributes,
@@ -388,7 +380,6 @@ function TabRow({
             event.stopPropagation();
             onToggleLock(tab);
           }}
-          disabled={lockToggleDisabled}
         />
         <Button variant="ghost" onClick={rowActions.handleRemoveClick(tab)} disabled={locked}>
           削除
@@ -431,33 +422,26 @@ function TabList({
         baseGapPx={TAB_LIST_GAP_PX}
         reorderEnabled={reorderEnabled}
       />
-      {tabs.map((tab, index) => {
-        const parentGroup =
-          tab.groupId === null ? null : set.groups.find((g) => g.id === tab.groupId);
-        const parentLocked =
-          set.locked || (parentGroup ? isGroupEffectivelyLocked(set, parentGroup.uid) : false);
-        return (
-          <Fragment key={tab.uid}>
-            <TabRow
-              tab={tab}
-              setId={setId}
-              reorderEnabled={reorderEnabled}
-              rowActions={rowActions}
-              locked={isTabEffectivelyLocked(set, tab)}
-              onToggleLock={onToggleTabLock}
-              lockToggleDisabled={parentLocked}
-            />
-            <DropZone
-              id={`zone:tab:${setId}:${groupUid}:${index + 1}`}
-              dropItem={{ type: 'tab-zone', setId, groupUid, index: index + 1 }}
-              activeDrop={activeDrop}
-              dropGapPx={dropGapPx}
-              baseGapPx={TAB_LIST_GAP_PX}
-              reorderEnabled={reorderEnabled}
-            />
-          </Fragment>
-        );
-      })}
+      {tabs.map((tab, index) => (
+        <Fragment key={tab.uid}>
+          <TabRow
+            tab={tab}
+            setId={setId}
+            reorderEnabled={reorderEnabled}
+            rowActions={rowActions}
+            locked={isTabEffectivelyLocked(set, tab)}
+            onToggleLock={onToggleTabLock}
+          />
+          <DropZone
+            id={`zone:tab:${setId}:${groupUid}:${index + 1}`}
+            dropItem={{ type: 'tab-zone', setId, groupUid, index: index + 1 }}
+            activeDrop={activeDrop}
+            dropGapPx={dropGapPx}
+            baseGapPx={TAB_LIST_GAP_PX}
+            reorderEnabled={reorderEnabled}
+          />
+        </Fragment>
+      ))}
     </ul>
   );
 }
@@ -548,7 +532,6 @@ function UngroupedTabBlock({
         rowActions={rowActions}
         locked={isTabEffectivelyLocked(set, tab)}
         onToggleLock={onToggleTabLock}
-        lockToggleDisabled={set.locked}
       />
     </ul>
   );
@@ -762,7 +745,6 @@ function GroupSection({
             ariaLabelOn="ロック解除"
             ariaLabelOff="ロック"
             onToggle={() => onToggleGroupLock(group.uid)}
-            disabled={set.locked}
           />
           <Button variant="ghost" onClick={() => onRestoreGroup(group.id)} disabled={!hasTabs}>
             グループを復元
@@ -1754,10 +1736,7 @@ export function ManagerApp() {
         if (set.id !== setId) {
           return set;
         }
-        return {
-          ...set,
-          tabs: set.tabs.map((tab) => (tab.uid === tabUid ? { ...tab, locked: !tab.locked } : tab)),
-        };
+        return toggleTabLockWithPropagation(set, tabUid);
       }),
     }));
     await refreshState(updated.historySets);
@@ -1846,11 +1825,7 @@ export function ManagerApp() {
         if (set.id !== setId) {
           return set;
         }
-        const targetGroup = set.groups.find((group) => group.uid === groupUid);
-        if (!targetGroup) {
-          return set;
-        }
-        return applyGroupLock(set, groupUid, !targetGroup.locked);
+        return toggleGroupLockWithPropagation(set, groupUid);
       }),
     }));
     await refreshState(updated.historySets);

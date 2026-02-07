@@ -6,6 +6,9 @@ import {
   applySetLock,
   isGroupEffectivelyLocked,
   isTabEffectivelyLocked,
+  syncAncestorLocksFromTabs,
+  toggleGroupLockWithPropagation,
+  toggleTabLockWithPropagation,
 } from './lockState';
 
 function createSet(): HistorySet {
@@ -117,5 +120,99 @@ describe('applyGroupLock', () => {
     expect(result.locked).toBe(false);
     expect(result.groups.find((group) => group.uid === 'g-1')?.locked).toBe(false);
     expect(result.tabs.find((tab) => tab.uid === 't-1')?.locked).toBe(false);
+  });
+});
+
+describe('toggleTabLockWithPropagation', () => {
+  it('親ロック中でも子タブを解除でき、祖先のグループとセットも解除する', () => {
+    const set = applySetLock(createSet(), true);
+
+    const result = toggleTabLockWithPropagation(set, 't-1');
+
+    expect(result.locked).toBe(false);
+    expect(result.groups.find((group) => group.uid === 'g-1')?.locked).toBe(false);
+    expect(result.tabs.find((tab) => tab.uid === 't-1')?.locked).toBe(false);
+  });
+
+  it('全タブがロック状態になるとセットを自動ロックする', () => {
+    const base = createSet();
+    const primed: HistorySet = {
+      ...base,
+      groups: base.groups.map((group) =>
+        group.uid === 'g-2' ? { ...group, locked: true } : group,
+      ),
+      tabs: base.tabs.map((tab) => (tab.uid === 't-2' ? { ...tab, locked: true } : tab)),
+    };
+
+    const result = toggleTabLockWithPropagation(primed, 't-1');
+
+    expect(result.tabs.every((tab) => tab.locked)).toBe(true);
+    expect(result.groups.find((group) => group.uid === 'g-1')?.locked).toBe(true);
+    expect(result.locked).toBe(true);
+  });
+});
+
+describe('toggleGroupLockWithPropagation', () => {
+  it('親ロック中でも子グループを解除でき、セットも解除する', () => {
+    const set = applySetLock(createSet(), true);
+
+    const result = toggleGroupLockWithPropagation(set, 'g-1');
+
+    expect(result.locked).toBe(false);
+    expect(result.groups.find((group) => group.uid === 'g-1')?.locked).toBe(false);
+    expect(result.tabs.find((tab) => tab.uid === 't-1')?.locked).toBe(false);
+  });
+
+  it('グループ配下をロックして全タブロックが成立したらセットを自動ロックする', () => {
+    const base = createSet();
+    const primed: HistorySet = {
+      ...base,
+      groups: base.groups.map((group) =>
+        group.uid === 'g-2' ? { ...group, locked: true } : group,
+      ),
+      tabs: base.tabs.map((tab) => (tab.uid === 't-2' ? { ...tab, locked: true } : tab)),
+    };
+
+    const result = toggleGroupLockWithPropagation(primed, 'g-1');
+
+    expect(result.groups.find((group) => group.uid === 'g-1')?.locked).toBe(true);
+    expect(result.tabs.find((tab) => tab.uid === 't-1')?.locked).toBe(true);
+    expect(result.locked).toBe(true);
+  });
+});
+
+describe('syncAncestorLocksFromTabs', () => {
+  it('グループ内の残タブがすべてロックならグループをロックに同期する', () => {
+    const set = createSet();
+    const source: HistorySet = {
+      ...set,
+      groups: set.groups.map((group) =>
+        group.uid === 'g-1' ? { ...group, locked: false } : group,
+      ),
+      tabs: set.tabs.map((tab) =>
+        tab.uid === 't-1'
+          ? { ...tab, locked: true }
+          : tab.uid === 't-2'
+            ? { ...tab, locked: true }
+            : tab,
+      ),
+    };
+
+    const result = syncAncestorLocksFromTabs(source);
+
+    expect(result.groups.find((group) => group.uid === 'g-1')?.locked).toBe(true);
+  });
+
+  it('セット内の残タブがすべてロックならセットをロックに同期する', () => {
+    const set = createSet();
+    const source: HistorySet = {
+      ...set,
+      locked: false,
+      tabs: set.tabs.map((tab) => ({ ...tab, locked: true })),
+    };
+
+    const result = syncAncestorLocksFromTabs(source);
+
+    expect(result.locked).toBe(true);
   });
 });

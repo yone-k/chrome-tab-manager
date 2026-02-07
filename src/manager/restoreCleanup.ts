@@ -1,6 +1,10 @@
 import type { HistorySet, TabSnapshot } from '../tab-manager/types';
 import { normalizeLayout } from '../tab-manager/layout';
-import { isGroupEffectivelyLocked, isTabEffectivelyLocked } from './lockState';
+import {
+  isGroupEffectivelyLocked,
+  isTabEffectivelyLocked,
+  syncAncestorLocksFromTabs,
+} from './lockState';
 
 type TabKey = string;
 
@@ -33,10 +37,10 @@ export function cleanupHistorySet(
       )
     : set.groups;
 
-  return {
+  return syncAncestorLocksFromTabs({
     ...set,
     tabs: remainingTabs,
     groups: remainingGroups,
     layout: normalizeLayout(set.layout, remainingGroups, remainingTabs),
-  };
+  });
 }

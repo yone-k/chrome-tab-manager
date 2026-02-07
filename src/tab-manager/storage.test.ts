@@ -250,6 +250,52 @@ describe('storage', () => {
     expect(set?.tabs[0]?.locked).toBe(false);
   });
 
+  it('locked の互換値を boolean へ正規化する', async () => {
+    const storage = createMemoryStorage({
+      tabManagerState: {
+        version: 1,
+        exclusions: [],
+        historySets: [
+          {
+            id: 'set-8',
+            name: 'window-8',
+            createdAt: 1,
+            windowId: 1,
+            locked: 'true',
+            managerBinding: null,
+            groups: [
+              {
+                uid: 'g-8',
+                id: 8,
+                title: 'g',
+                color: 'grey',
+                index: 0,
+                locked: 1,
+              },
+            ],
+            tabs: [
+              {
+                uid: 't-8',
+                title: 'tab',
+                url: 'https://example.com',
+                index: 0,
+                groupId: 8,
+                locked: '1',
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    const state = await getState(storage);
+    const set = state.historySets[0];
+
+    expect(set?.locked).toBe(true);
+    expect(set?.groups[0]?.locked).toBe(true);
+    expect(set?.tabs[0]?.locked).toBe(true);
+  });
+
   it('wrapChromeStorage は get の lastError を reject する', async () => {
     const runtimeLastError: chrome.runtime.LastError = { message: 'storage get failed' };
 

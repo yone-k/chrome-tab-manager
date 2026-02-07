@@ -79,6 +79,25 @@ function normalizeManagerBinding(raw: unknown): HistorySet['managerBinding'] {
   };
 }
 
+function normalizeLocked(value: unknown) {
+  if (typeof value === 'boolean') {
+    return value;
+  }
+  if (typeof value === 'number') {
+    return value !== 0;
+  }
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === 'true' || normalized === '1') {
+      return true;
+    }
+    if (normalized === 'false' || normalized === '0') {
+      return false;
+    }
+  }
+  return false;
+}
+
 function normalizeHistorySets(rawSets: unknown): HistorySet[] {
   if (!Array.isArray(rawSets)) {
     return [];
@@ -102,7 +121,7 @@ function normalizeHistorySets(rawSets: unknown): HistorySet[] {
         title: typeof group.title === 'string' ? group.title : 'Untitled Group',
         color: isTabGroupColor(group.color) ? group.color : 'grey',
         index: typeof group.index === 'number' ? group.index : 0,
-        locked: typeof group.locked === 'boolean' ? group.locked : false,
+        locked: normalizeLocked(group.locked),
       }));
       const normalizedTabs = tabs.filter(isRecord).map((tab) => ({
         uid: typeof tab.uid === 'string' ? tab.uid : createUid('tab'),
@@ -110,14 +129,14 @@ function normalizeHistorySets(rawSets: unknown): HistorySet[] {
         url: typeof tab.url === 'string' ? tab.url : '',
         index: typeof tab.index === 'number' ? tab.index : 0,
         groupId: typeof tab.groupId === 'number' ? tab.groupId : null,
-        locked: typeof tab.locked === 'boolean' ? tab.locked : false,
+        locked: normalizeLocked(tab.locked),
       }));
       const normalizedSet: HistorySet = {
         id: typeof raw.id === 'string' ? raw.id : createUid('set'),
         name: normalizedName,
         createdAt,
         windowId: typeof raw.windowId === 'number' ? raw.windowId : 0,
-        locked: typeof raw.locked === 'boolean' ? raw.locked : false,
+        locked: normalizeLocked(raw.locked),
         managerBinding: normalizeManagerBinding(raw.managerBinding),
         groups: normalizedGroups,
         tabs: normalizedTabs,
@@ -151,6 +170,41 @@ function coerceState(raw: unknown): TabManagerState {
   };
 }
 
+function promoteLockedAncestorsInRawSet(raw: unknown) {
+  if (!isRecord(raw)) {
+    return raw;
+  }
+  const tabs = Array.isArray(raw.tabs) ? raw.tabs.filter(isRecord) : [];
+  const groups = Array.isArray(raw.groups) ? raw.groups : [];
+  let hasGroupPromotion = false;
+  const nextGroups = groups.map((group) => {
+    if (!isRecord(group) || typeof group.id !== 'number') {
+      return group;
+    }
+    const groupedTabs = tabs.filter((tab) => tab.groupId === group.id);
+    const shouldLock =
+      groupedTabs.length > 0 && groupedTabs.every((tab) => normalizeLocked(tab.locked));
+    if (shouldLock && !normalizeLocked(group.locked)) {
+      hasGroupPromotion = true;
+      return {
+        ...group,
+        locked: true,
+      };
+    }
+    return group;
+  });
+  const shouldLockSet = tabs.length > 0 && tabs.every((tab) => normalizeLocked(tab.locked));
+  const hasSetPromotion = shouldLockSet && !normalizeLocked(raw.locked);
+  if (!hasGroupPromotion && !hasSetPromotion) {
+    return raw;
+  }
+  return {
+    ...raw,
+    locked: hasSetPromotion ? true : raw.locked,
+    groups: nextGroups,
+  };
+}
+
 export async function getState(storage: StorageAreaLike = wrapChromeStorage(chrome.storage.local)) {
   const result = await storage.get([STATE_KEY]);
   return coerceState(result[STATE_KEY]);
@@ -162,6 +216,36 @@ export async function setState(
 ) {
   await storage.set({ [STATE_KEY]: state });
   return state;
+}
+
+export async function prependHistorySet(
+  historySet: HistorySet,
+  maxHistorySets: number,
+  storage: StorageAreaLike = wrapChromeStorage(chrome.storage.local),
+) {
+  const result = await storage.get([STATE_KEY]);
+  const rawState = isRecord(result[STATE_KEY]) ? result[STATE_KEY] : {};
+  const defaults = getDefaultState();
+  const rawHistorySets = Array.isArray(rawState.historySets) ? rawState.historySets : [];
+  const nextHistorySets = [historySet, ...rawHistorySets.map(promoteLockedAncestorsInRawSet)].slice(
+    0,
+    maxHistorySets,
+  );
+  const nextRawState: Record<string, unknown> = {
+    version: 1,
+    exclusions: Array.isArray(rawState.exclusions) ? rawState.exclusions : defaults.exclusions,
+    restoreLoadingSuppressionEnabled:
+      typeof rawState.restoreLoadingSuppressionEnabled === 'boolean'
+        ? rawState.restoreLoadingSuppressionEnabled
+        : defaults.restoreLoadingSuppressionEnabled,
+    removeRestoredTabsEnabled:
+      typeof rawState.removeRestoredTabsEnabled === 'boolean'
+        ? rawState.removeRestoredTabsEnabled
+        : defaults.removeRestoredTabsEnabled,
+    historySets: nextHistorySets,
+  };
+  await storage.set({ [STATE_KEY]: nextRawState });
+  return coerceState(nextRawState);
 }
 
 export async function updateState(
