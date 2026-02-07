@@ -9,6 +9,7 @@
   --tm-surface-strong: #ffffff;
   --tm-surface-muted: #f8fafc;
   --tm-surface-border: #e2e8f0;
+  --tm-card-border: #dbe5f3;
   --tm-input-border: #cbd5f5;
   --tm-accent-bg: #1d4ed8;
   --tm-accent-text: #fff;
@@ -38,6 +39,7 @@
   --tm-surface-strong: #1b2535;
   --tm-surface-muted: #253247;
   --tm-surface-border: #334155;
+  --tm-card-border: #3f536d;
   --tm-input-border: #475569;
   --tm-accent-bg: #2563eb;
   --tm-accent-text: #f8fafc;
@@ -187,6 +189,7 @@ body {
   padding: 10px;
   background: var(--tm-surface);
   border-radius: 10px;
+  border: 1px solid var(--tm-card-border);
   box-shadow: var(--tm-shadow);
   display: grid;
   gap: 6px;
