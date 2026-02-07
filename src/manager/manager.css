@@ -203,7 +203,6 @@ body {
   flex-direction: column;
   gap: 6px;
   overflow-y: auto;
-  overscroll-behavior: contain;
   scrollbar-gutter: stable;
   align-items: stretch;
 }
