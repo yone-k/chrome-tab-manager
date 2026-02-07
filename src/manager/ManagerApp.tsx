@@ -887,7 +887,7 @@ function SetCard({
   const layoutEntries = buildLayoutEntries(set);
   const shouldShowBlockList = reorderEnabled || layoutEntries.length > 0;
   const bindingStatusLabel = getBindingStatusLabel(bindingStatus);
-  const showBindingIcon = bindingStatus !== 'unbound';
+  const showBindingIcon = bindingStatus === 'bound-current';
   const isBoundCurrent = bindingStatus === 'bound-current';
 
   return (
