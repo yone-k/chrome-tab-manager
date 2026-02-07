@@ -24,7 +24,8 @@
 - `pnpm format`: Prettier でフォーマット
 - `pnpm typecheck`: TypeScript の型チェックのみ
 - `pnpm check`: lint + format + typecheck
-- 一連のタスク完了時は必ず `pnpm check` を実行し、結果を報告すること
+- タスク完了条件として `pnpm test` と `pnpm check` がどちらも成功していることを必須とする
+- `pnpm test` と `pnpm check` の成功後、最後に `pnpm build` を実行し、成功した時点でタスク完了とする
 
 ## コーディングスタイル / 命名規則
 

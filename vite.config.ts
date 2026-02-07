@@ -9,7 +9,6 @@ export default defineConfig({
   build: {
     rollupOptions: {
       input: {
-        popup: 'popup.html',
         manager: 'manager.html',
         options: 'options.html',
       },
