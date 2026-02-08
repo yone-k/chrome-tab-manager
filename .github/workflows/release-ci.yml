@@ -14,6 +14,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          fetch-depth: 0
       - name: Setup Node
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
@@ -39,7 +41,34 @@ jobs:
         run: |
           cd release
           zip -r "chrome-tab-manager-v${{ github.ref_name }}.zip" chrome-tab-manager
+      - name: Generate release notes
+        run: |
+          current_tag="${{ github.ref_name }}"
+          previous_tag="$(git tag --sort=-v:refname | awk -v current="$current_tag" '$0 != current { print; exit }')"
+
+          if [ -n "$previous_tag" ]; then
+            {
+              echo "## Changes (${previous_tag}..${current_tag})"
+              echo
+              git log --pretty='- %s (%h)' "${previous_tag}..${current_tag}"
+            } > release-notes.md
+          else
+            {
+              echo "## Changes (${current_tag})"
+              echo
+              git log --pretty='- %s (%h)' "${current_tag}"
+            } > release-notes.md
+          fi
+
+          if [ ! -s release-notes.md ] || [ "$(wc -l < release-notes.md)" -le 2 ]; then
+            {
+              echo "## Changes (${current_tag})"
+              echo
+              echo "- No changes found in this release range."
+            } > release-notes.md
+          fi
       - name: Upload Release Assets
         uses: softprops/action-gh-release@a06a81a03ee405af7f2048a818ed3f03bbf83c7b
         with:
           files: release/chrome-tab-manager-v${{ github.ref_name }}.zip
+          body_path: release-notes.md
