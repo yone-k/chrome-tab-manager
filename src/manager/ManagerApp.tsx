@@ -50,6 +50,7 @@ import {
 } from '../theme/theme';
 import { createUid } from '../tab-manager/uid';
 import { deleteGroupFromHistorySet } from './groupState';
+import { createGroupAtTop } from './groupCreate';
 import {
   applySetLock,
   isGroupEffectivelyLocked,
@@ -2233,25 +2234,7 @@ export function ManagerApp() {
         if (set.id !== setId) {
           return set;
         }
-        const nextId =
-          set.groups.length === 0 ? 1 : Math.max(...set.groups.map((group) => group.id)) + 1;
-        const newGroup: GroupSnapshot = {
-          uid: createUid('group'),
-          id: nextId,
-          title: '新規グループ',
-          color: 'grey',
-          index: set.groups.length,
-          locked: false,
-        };
-        const nextLayout = [
-          ...normalizeLayout(set.layout, set.groups, set.tabs),
-          { type: 'group', uid: newGroup.uid } as const,
-        ];
-        return {
-          ...set,
-          groups: [...set.groups, newGroup],
-          layout: nextLayout,
-        };
+        return createGroupAtTop(set, createUid('group'));
       }),
     }));
     await refreshState(updated.historySets);
