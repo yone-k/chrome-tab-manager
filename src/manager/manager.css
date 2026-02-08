@@ -9,6 +9,7 @@
   --tm-surface-strong: #ffffff;
   --tm-surface-muted: #f8fafc;
   --tm-surface-border: #e2e8f0;
+  --tm-card-border: #dbe5f3;
   --tm-input-border: #cbd5f5;
   --tm-accent-bg: #1d4ed8;
   --tm-accent-text: #fff;
@@ -38,6 +39,7 @@
   --tm-surface-strong: #1b2535;
   --tm-surface-muted: #253247;
   --tm-surface-border: #334155;
+  --tm-card-border: #3f536d;
   --tm-input-border: #475569;
   --tm-accent-bg: #2563eb;
   --tm-accent-text: #f8fafc;
@@ -76,9 +78,8 @@ body {
 }
 
 .manager {
-  width: min(100%, 1200px);
-  max-width: 1200px;
-  margin: 0 auto;
+  width: 100%;
+  margin: 0;
   display: grid;
   gap: 8px;
 }
@@ -159,31 +160,71 @@ body {
 .manager__content {
   display: grid;
   gap: 0;
+  align-items: start;
+}
+
+.manager__set-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+  gap: 6px;
+  align-items: start;
+}
+
+.manager__set-grid-item {
+  position: relative;
+  min-width: 0;
+}
+
+.manager__set-grid-item > .manager__card {
+  min-width: 0;
+}
+
+.manager__set-drop-placeholder {
+  width: 100%;
+  min-width: 0;
+  min-height: 120px;
 }
 
 .manager__card {
   padding: 10px;
   background: var(--tm-surface);
   border-radius: 10px;
+  border: 1px solid var(--tm-card-border);
   box-shadow: var(--tm-shadow);
   display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  height: clamp(460px, calc(100vh - 210px), 720px);
   gap: 6px;
+}
+
+.manager__card-body {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  align-items: stretch;
 }
 
 .manager__card-header {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  align-items: center;
-  justify-content: space-between;
+  align-items: flex-start;
 }
 
 .manager__card-header-main {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 6px;
   min-width: 0;
   flex: 1 1 auto;
+}
+
+.manager__card-header-main > .drag-handle {
+  align-self: flex-start;
+  margin-top: 1px;
 }
 
 .manager__card-header-text {
@@ -271,6 +312,9 @@ body {
   display: flex;
   gap: 4px;
   flex-wrap: wrap;
+  justify-content: flex-end;
+  width: 100%;
+  margin-top: 4px;
 }
 
 .manager__group {
@@ -431,11 +475,50 @@ body {
 .manager__block-list {
   display: grid;
   gap: 0;
+  min-height: 0;
+  align-content: start;
 }
 
 .manager__drop-zone {
   position: relative;
   height: 1px;
+}
+
+.manager__drop-zone--vertical {
+  width: 100%;
+}
+
+.manager__drop-zone--horizontal {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 0;
+  overflow: visible;
+  z-index: 4;
+  pointer-events: none;
+  opacity: 0;
+  transition:
+    width 0.14s ease,
+    opacity 0.14s ease;
+}
+
+.manager__drop-zone--horizontal.manager__drop-zone--left {
+  left: 0;
+  transform: translateX(-100%);
+}
+
+.manager__drop-zone--horizontal.manager__drop-zone--right {
+  right: 0;
+  transform: translateX(100%);
+}
+
+.manager__drop-zone--horizontal:not(.manager__drop-zone--active) {
+  padding-inline: 14px;
+  margin-inline: -14px;
+}
+
+.manager__drop-zone--horizontal.manager__drop-zone--active {
+  opacity: 1;
 }
 
 .drag-handle {
@@ -454,6 +537,8 @@ body {
   flex-shrink: 0;
   justify-self: start;
   align-self: center;
+  position: relative;
+  z-index: 5;
 }
 
 .drag-handle::before {
