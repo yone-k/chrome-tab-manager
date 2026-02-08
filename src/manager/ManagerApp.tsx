@@ -51,6 +51,7 @@ import {
 import { createUid } from '../tab-manager/uid';
 import { deleteGroupFromHistorySet } from './groupState';
 import { createGroupAtTop } from './groupCreate';
+import { deleteTabFromHistorySet } from './tabState';
 import {
   applySetLock,
   isGroupEffectivelyLocked,
@@ -2191,13 +2192,7 @@ export function ManagerApp() {
         if (set.id !== setId) {
           return set;
         }
-        const filteredTabs = set.tabs.filter((tab) => tab.uid !== tabToDelete.uid);
-        return {
-          ...set,
-          tabs: filteredTabs,
-          groups: set.groups,
-          layout: normalizeLayout(set.layout, set.groups, filteredTabs),
-        };
+        return deleteTabFromHistorySet(set, tabToDelete.uid);
       }),
     }));
     await refreshState(updated.historySets);
