@@ -193,11 +193,18 @@ body {
   box-shadow: var(--tm-shadow);
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
-  height: clamp(460px, calc(100vh - 210px), 720px);
+  height: clamp(360px, calc(100vh / 2), 720px);
   gap: 6px;
 }
 
+.manager__card-body-shell {
+  min-height: 0;
+  position: relative;
+  overflow: hidden;
+}
+
 .manager__card-body {
+  height: 100%;
   min-height: 0;
   display: flex;
   flex-direction: column;
@@ -205,6 +212,45 @@ body {
   overflow-y: auto;
   scrollbar-gutter: stable;
   align-items: stretch;
+}
+
+.manager__card-body-shell::before,
+.manager__card-body-shell::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 24px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 120ms ease-out;
+  z-index: 1;
+}
+
+.manager__card-body-shell::before {
+  top: 0;
+  background: linear-gradient(
+    to bottom,
+    var(--tm-surface),
+    color-mix(in srgb, var(--tm-surface) 0%, transparent)
+  );
+}
+
+.manager__card-body-shell::after {
+  bottom: 0;
+  background: linear-gradient(
+    to top,
+    var(--tm-surface),
+    color-mix(in srgb, var(--tm-surface) 0%, transparent)
+  );
+}
+
+.manager__card-body-shell--fade-top::before {
+  opacity: 1;
+}
+
+.manager__card-body-shell--fade-bottom::after {
+  opacity: 1;
 }
 
 .manager__card-header {

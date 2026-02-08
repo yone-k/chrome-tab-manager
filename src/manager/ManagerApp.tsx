@@ -1,4 +1,12 @@
-import { Fragment, type KeyboardEvent, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  Fragment,
+  type KeyboardEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 
 import {
   DndContext,
@@ -71,6 +79,7 @@ import type { DragItem, DropTarget } from './dragReorder';
 import { applyDragReorder } from './dragReorder';
 import { computeDropGapPx, DEFAULT_DROP_GAP_PX } from './dropGap';
 import { selectDragItemHeight } from './dragHeight';
+import { resolveScrollFadeState } from './scrollFade';
 import './manager.css';
 
 type LoadState = 'loading' | 'ready' | 'error';
@@ -1039,6 +1048,9 @@ function SetCard({
   const [isEditing, setIsEditing] = useState(false);
   const [draftTitle, setDraftTitle] = useState(set.name);
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const cardBodyRef = useRef<HTMLDivElement | null>(null);
+  const [showTopScrollFade, setShowTopScrollFade] = useState(false);
+  const [showBottomScrollFade, setShowBottomScrollFade] = useState(false);
   const titleEditing = isEditing || shouldStartEditing;
   const {
     setNodeRef: setDragRef,
@@ -1104,6 +1116,40 @@ function SetCard({
   const hasRefreshableTabs = (fullSet?.tabs ?? set.tabs).some((tab) =>
     shouldRefreshTabMetadata(tab),
   );
+
+  const updateScrollFade = useCallback(() => {
+    const container = cardBodyRef.current;
+    if (!container) {
+      setShowTopScrollFade(false);
+      setShowBottomScrollFade(false);
+      return;
+    }
+
+    const next = resolveScrollFadeState({
+      scrollTop: container.scrollTop,
+      scrollHeight: container.scrollHeight,
+      clientHeight: container.clientHeight,
+    });
+    setShowTopScrollFade((current) => (current === next.showTopFade ? current : next.showTopFade));
+    setShowBottomScrollFade((current) =>
+      current === next.showBottomFade ? current : next.showBottomFade,
+    );
+  }, []);
+
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => {
+      updateScrollFade();
+    });
+    return () => cancelAnimationFrame(frame);
+  });
+
+  useEffect(() => {
+    const handleResize = () => {
+      updateScrollFade();
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [updateScrollFade]);
 
   return (
     <article
@@ -1201,31 +1247,37 @@ function SetCard({
         </div>
       </div>
 
-      <div className="manager__card-body">
-        {shouldShowBlockList ? (
-          <>
-            <div className="manager__group-controls">
-              <span className="manager__group-label">グループ</span>
-              <Button variant="ghost" onClick={onCreateGroup}>
-                新規グループ
-              </Button>
-            </div>
-            <BlockList
-              entries={layoutEntries}
-              set={set}
-              setId={set.id}
-              reorderEnabled={reorderEnabled}
-              onRestoreGroup={onRestoreGroup}
-              onRenameGroup={onRenameGroup}
-              onDeleteGroup={onDeleteGroup}
-              onToggleGroupLock={onToggleGroupLock}
-              onToggleTabLock={onToggleTabLock}
-              rowActions={rowActions}
-              activeDrop={activeDrop}
-              dropGapPx={dropGapPx}
-            />
-          </>
-        ) : null}
+      <div
+        className={`manager__card-body-shell${showTopScrollFade ? ' manager__card-body-shell--fade-top' : ''}${
+          showBottomScrollFade ? ' manager__card-body-shell--fade-bottom' : ''
+        }`}
+      >
+        <div ref={cardBodyRef} className="manager__card-body" onScroll={updateScrollFade}>
+          {shouldShowBlockList ? (
+            <>
+              <div className="manager__group-controls">
+                <span className="manager__group-label">グループ</span>
+                <Button variant="ghost" onClick={onCreateGroup}>
+                  新規グループ
+                </Button>
+              </div>
+              <BlockList
+                entries={layoutEntries}
+                set={set}
+                setId={set.id}
+                reorderEnabled={reorderEnabled}
+                onRestoreGroup={onRestoreGroup}
+                onRenameGroup={onRenameGroup}
+                onDeleteGroup={onDeleteGroup}
+                onToggleGroupLock={onToggleGroupLock}
+                onToggleTabLock={onToggleTabLock}
+                rowActions={rowActions}
+                activeDrop={activeDrop}
+                dropGapPx={dropGapPx}
+              />
+            </>
+          ) : null}
+        </div>
       </div>
     </article>
   );
