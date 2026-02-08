@@ -1,4 +1,12 @@
-import { Fragment, type KeyboardEvent, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  Fragment,
+  type KeyboardEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 
 import {
   DndContext,
@@ -42,6 +50,10 @@ import {
 } from '../theme/theme';
 import { createUid } from '../tab-manager/uid';
 import { deleteGroupFromHistorySet } from './groupState';
+import { createGroupAtTop } from './groupCreate';
+import { shouldIgnoreEnterForIme } from './ime';
+import { deleteTabFromHistorySet } from './tabState';
+import { resolveGroupTitleForCommit, resolveSetTitleForCommit } from './titleCommit';
 import {
   applySetLock,
   isGroupEffectivelyLocked,
@@ -61,10 +73,17 @@ import {
   type ManagerContext,
 } from './bindingState';
 import { createTabRowActions } from './tabRowActions';
+import { buildFaviconCandidates } from './favicon';
+import {
+  mergeRefreshedTabMetadata,
+  shouldRefreshTabMetadata,
+  type RefreshedTabMetadata,
+} from './metadataRefresh';
 import type { DragItem, DropTarget } from './dragReorder';
 import { applyDragReorder } from './dragReorder';
 import { computeDropGapPx, DEFAULT_DROP_GAP_PX } from './dropGap';
 import { selectDragItemHeight } from './dragHeight';
+import { resolveScrollFadeState } from './scrollFade';
 import './manager.css';
 
 type LoadState = 'loading' | 'ready' | 'error';
@@ -84,9 +103,11 @@ type ActiveDrop = {
   overId: string;
 };
 
-const SET_LIST_GAP_PX = 10;
-const BLOCK_LIST_GAP_PX = 10;
+const SET_LIST_GAP_PX = 4;
+const BLOCK_LIST_GAP_PX = 4;
 const TAB_LIST_GAP_PX = 6;
+const METADATA_REFRESH_PER_TAB_TIMEOUT_MS = 1200;
+const METADATA_REFRESH_TOTAL_TIMEOUT_MS = 20_000;
 
 function getDistanceToRectSquared(
   pointer: { x: number; y: number },
@@ -249,10 +270,35 @@ function OverlayHandle({ compact }: { compact?: boolean }) {
   );
 }
 
+function TabFavicon({ tab }: { tab: Pick<TabSnapshot, 'favIconUrl' | 'url'> }) {
+  const candidates = buildFaviconCandidates(tab);
+  const [candidateIndex, setCandidateIndex] = useState(0);
+
+  const src = candidates[candidateIndex];
+  if (!src) {
+    return (
+      <span className="manager__tab-favicon manager__tab-favicon--placeholder" aria-hidden="true">
+        ●
+      </span>
+    );
+  }
+
+  return (
+    <img
+      className="manager__tab-favicon"
+      src={src}
+      alt=""
+      draggable={false}
+      onError={() => setCandidateIndex((index) => Math.min(index + 1, candidates.length))}
+    />
+  );
+}
+
 function OverlayTabRow({ tab }: { tab: TabSnapshot }) {
   return (
     <div className="manager__tab manager__tab--overlay">
       <OverlayHandle compact />
+      <TabFavicon key={`${tab.uid}:${tab.favIconUrl ?? ''}:${tab.url}`} tab={tab} />
       <div className="manager__tab-main">
         <p className="manager__tab-title">{tab.title}</p>
         <p className="manager__tab-url">{tab.url}</p>
@@ -531,6 +577,7 @@ function TabRow({ tab, setId, reorderEnabled, rowActions, locked, onToggleLock }
         {...attributes}
         {...listeners}
       />
+      <TabFavicon key={`${tab.uid}:${tab.favIconUrl ?? ''}:${tab.url}`} tab={tab} />
       <div className="manager__tab-main">
         <p className="manager__tab-title">
           <span className="manager__title-with-lock">
@@ -840,8 +887,12 @@ function GroupSection({
   }, [isEditing]);
 
   const commitTitle = () => {
-    const nextTitle = draftTitle.trim() || '新規グループ';
+    const nextTitle = resolveGroupTitleForCommit(draftTitle, group.title);
     setIsEditing(false);
+    if (nextTitle === group.title) {
+      setDraftTitle(group.title);
+      return;
+    }
     if (nextTitle !== group.title) {
       onRenameGroup(group.uid, nextTitle);
     }
@@ -854,6 +905,9 @@ function GroupSection({
 
   const handleTitleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key === 'Enter') {
+      if (shouldIgnoreEnterForIme(event)) {
+        return;
+      }
       event.preventDefault();
       commitTitle();
     }
@@ -953,6 +1007,8 @@ type SetCardProps = {
   shouldStartEditing: boolean;
   onStartEditingHandled: () => void;
   onRestoreSet: () => void;
+  onRefreshMetadata: () => void;
+  refreshingMetadata: boolean;
   onDeleteSet: () => void;
   onToggleSetLock: () => void;
   onToggleBinding: () => void;
@@ -977,6 +1033,8 @@ function SetCard({
   shouldStartEditing,
   onStartEditingHandled,
   onRestoreSet,
+  onRefreshMetadata,
+  refreshingMetadata,
   onDeleteSet,
   onToggleSetLock,
   onToggleBinding,
@@ -1001,6 +1059,9 @@ function SetCard({
   const [isEditing, setIsEditing] = useState(false);
   const [draftTitle, setDraftTitle] = useState(set.name);
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const cardBodyRef = useRef<HTMLDivElement | null>(null);
+  const [showTopScrollFade, setShowTopScrollFade] = useState(false);
+  const [showBottomScrollFade, setShowBottomScrollFade] = useState(false);
   const titleEditing = isEditing || shouldStartEditing;
   const {
     setNodeRef: setDragRef,
@@ -1035,8 +1096,12 @@ function SetCard({
   }, [titleEditing]);
 
   const commitTitle = () => {
-    const nextTitle = normalizeManualHistorySetName(draftTitle);
+    const nextTitle = resolveSetTitleForCommit(draftTitle, set.name);
     setIsEditing(false);
+    if (nextTitle === set.name) {
+      setDraftTitle(set.name);
+      return;
+    }
     if (nextTitle !== set.name) {
       onRenameSet(nextTitle);
     }
@@ -1049,6 +1114,9 @@ function SetCard({
 
   const handleTitleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key === 'Enter') {
+      if (shouldIgnoreEnterForIme(event)) {
+        return;
+      }
       event.preventDefault();
       commitTitle();
     }
@@ -1063,6 +1131,43 @@ function SetCard({
   const bindingStatusLabel = getBindingStatusLabel(bindingStatus);
   const showBindingIcon = bindingStatus === 'bound-current';
   const isBoundCurrent = bindingStatus === 'bound-current';
+  const hasRefreshableTabs = (fullSet?.tabs ?? set.tabs).some((tab) =>
+    shouldRefreshTabMetadata(tab),
+  );
+
+  const updateScrollFade = useCallback(() => {
+    const container = cardBodyRef.current;
+    if (!container) {
+      setShowTopScrollFade(false);
+      setShowBottomScrollFade(false);
+      return;
+    }
+
+    const next = resolveScrollFadeState({
+      scrollTop: container.scrollTop,
+      scrollHeight: container.scrollHeight,
+      clientHeight: container.clientHeight,
+    });
+    setShowTopScrollFade((current) => (current === next.showTopFade ? current : next.showTopFade));
+    setShowBottomScrollFade((current) =>
+      current === next.showBottomFade ? current : next.showBottomFade,
+    );
+  }, []);
+
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => {
+      updateScrollFade();
+    });
+    return () => cancelAnimationFrame(frame);
+  });
+
+  useEffect(() => {
+    const handleResize = () => {
+      updateScrollFade();
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [updateScrollFade]);
 
   return (
     <article
@@ -1147,6 +1252,11 @@ function SetCard({
               <Button variant="primary" onClick={onRestoreSet}>
                 すべて復元
               </Button>
+              {hasRefreshableTabs || refreshingMetadata ? (
+                <Button variant="ghost" onClick={onRefreshMetadata} disabled={refreshingMetadata}>
+                  {refreshingMetadata ? '再取得中...' : '情報再取得'}
+                </Button>
+              ) : null}
               <Button variant="ghost" onClick={onDeleteSet} disabled={set.locked}>
                 ウィンドウを削除
               </Button>
@@ -1155,31 +1265,37 @@ function SetCard({
         </div>
       </div>
 
-      <div className="manager__card-body">
-        {shouldShowBlockList ? (
-          <>
-            <div className="manager__group-controls">
-              <span className="manager__group-label">グループ</span>
-              <Button variant="ghost" onClick={onCreateGroup}>
-                新規グループ
-              </Button>
-            </div>
-            <BlockList
-              entries={layoutEntries}
-              set={set}
-              setId={set.id}
-              reorderEnabled={reorderEnabled}
-              onRestoreGroup={onRestoreGroup}
-              onRenameGroup={onRenameGroup}
-              onDeleteGroup={onDeleteGroup}
-              onToggleGroupLock={onToggleGroupLock}
-              onToggleTabLock={onToggleTabLock}
-              rowActions={rowActions}
-              activeDrop={activeDrop}
-              dropGapPx={dropGapPx}
-            />
-          </>
-        ) : null}
+      <div
+        className={`manager__card-body-shell${showTopScrollFade ? ' manager__card-body-shell--fade-top' : ''}${
+          showBottomScrollFade ? ' manager__card-body-shell--fade-bottom' : ''
+        }`}
+      >
+        <div ref={cardBodyRef} className="manager__card-body" onScroll={updateScrollFade}>
+          {shouldShowBlockList ? (
+            <>
+              <div className="manager__group-controls">
+                <span className="manager__group-label">グループ</span>
+                <Button variant="ghost" onClick={onCreateGroup}>
+                  新規グループ
+                </Button>
+              </div>
+              <BlockList
+                entries={layoutEntries}
+                set={set}
+                setId={set.id}
+                reorderEnabled={reorderEnabled}
+                onRestoreGroup={onRestoreGroup}
+                onRenameGroup={onRenameGroup}
+                onDeleteGroup={onDeleteGroup}
+                onToggleGroupLock={onToggleGroupLock}
+                onToggleTabLock={onToggleTabLock}
+                rowActions={rowActions}
+                activeDrop={activeDrop}
+                dropGapPx={dropGapPx}
+              />
+            </>
+          ) : null}
+        </div>
       </div>
     </article>
   );
@@ -1243,6 +1359,34 @@ async function createRestoreWindow() {
   });
 }
 
+async function createMetadataRefreshWindow() {
+  return new Promise<{ windowId: number; tabId: number }>((resolve, reject) => {
+    chrome.windows.create({ focused: false }, (window: chrome.windows.Window | undefined) => {
+      if (chrome.runtime.lastError) {
+        reject(chrome.runtime.lastError);
+        return;
+      }
+      if (typeof window?.id !== 'number') {
+        reject(new Error('メタ情報再取得用のウィンドウを作成できませんでした。'));
+        return;
+      }
+      const windowId = window.id;
+      chrome.tabs.query({ windowId }, (tabs: chrome.tabs.Tab[]) => {
+        if (chrome.runtime.lastError) {
+          reject(chrome.runtime.lastError);
+          return;
+        }
+        const tab = tabs.find((item) => typeof item.id === 'number');
+        if (typeof tab?.id !== 'number') {
+          reject(new Error('メタ情報再取得用のタブを取得できませんでした。'));
+          return;
+        }
+        resolve({ windowId, tabId: tab.id });
+      });
+    });
+  });
+}
+
 async function getWindowTabCount(windowId: number) {
   return new Promise<number>((resolve, reject) => {
     chrome.tabs.query({ windowId }, (tabs: chrome.tabs.Tab[]) => {
@@ -1255,6 +1399,17 @@ async function getWindowTabCount(windowId: number) {
   });
 }
 
+async function removeWindow(windowId: number) {
+  return new Promise<void>((resolve) => {
+    chrome.windows.remove(windowId, () => {
+      if (chrome.runtime.lastError) {
+        console.warn('Failed to remove temporary window (non-blocking)', chrome.runtime.lastError);
+      }
+      resolve();
+    });
+  });
+}
+
 async function removeTab(tabId: number) {
   return new Promise<void>((resolve, reject) => {
     chrome.tabs.remove(tabId, () => {
@@ -1263,6 +1418,94 @@ async function removeTab(tabId: number) {
         return;
       }
       resolve();
+    });
+  });
+}
+
+async function updateTabUrl(tabId: number, url: string) {
+  return new Promise<chrome.tabs.Tab>((resolve, reject) => {
+    chrome.tabs.update(tabId, { url, active: false }, (tab?: chrome.tabs.Tab) => {
+      if (chrome.runtime.lastError) {
+        reject(chrome.runtime.lastError);
+        return;
+      }
+      if (!tab) {
+        reject(new Error('更新後のタブ情報を取得できませんでした。'));
+        return;
+      }
+      resolve(tab);
+    });
+  });
+}
+
+function resolveRefreshedTabMetadata(tab: chrome.tabs.Tab): RefreshedTabMetadata {
+  const title = typeof tab.title === 'string' ? tab.title.trim() : '';
+  const favIconUrl = typeof tab.favIconUrl === 'string' ? tab.favIconUrl.trim() : '';
+  return {
+    ...(title ? { title } : {}),
+    ...(favIconUrl ? { favIconUrl } : {}),
+  };
+}
+
+async function waitForTabMetadata(
+  tabId: number,
+  expectedUrl: string,
+  timeoutMs = METADATA_REFRESH_PER_TAB_TIMEOUT_MS,
+) {
+  return new Promise<{ metadata: RefreshedTabMetadata; timedOut: boolean }>((resolve) => {
+    let settled = false;
+    let metadata: RefreshedTabMetadata = {};
+    const mergeMetadata = (tab: chrome.tabs.Tab) => {
+      metadata = {
+        ...metadata,
+        ...resolveRefreshedTabMetadata(tab),
+      };
+    };
+
+    const finish = (timedOut: boolean) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearTimeout(timeoutId);
+      chrome.tabs.onUpdated.removeListener(handleUpdated);
+      resolve({ metadata, timedOut });
+    };
+
+    const handleUpdated = (
+      updatedTabId: number,
+      changeInfo: chrome.tabs.TabChangeInfo,
+      tab: chrome.tabs.Tab,
+    ) => {
+      if (updatedTabId !== tabId) {
+        return;
+      }
+      if (!matchesExpectedUrl(expectedUrl, tab, changeInfo)) {
+        return;
+      }
+      mergeMetadata(tab);
+      if (changeInfo.status === 'complete') {
+        finish(false);
+      }
+    };
+
+    const timeoutId = setTimeout(() => {
+      console.debug('Metadata wait timeout reached', { tabId, expectedUrl, timeoutMs });
+      finish(true);
+    }, timeoutMs);
+
+    chrome.tabs.onUpdated.addListener(handleUpdated);
+    chrome.tabs.get(tabId, (tab) => {
+      if (chrome.runtime.lastError || !tab) {
+        return;
+      }
+      if (!matchesExpectedUrl(expectedUrl, tab)) {
+        return;
+      }
+      mergeMetadata(tab);
+      if (tab.status === 'complete') {
+        finish(false);
+      }
     });
   });
 }
@@ -1479,6 +1722,7 @@ export function ManagerApp() {
   const [setDropWidthPx, setSetDropWidthPx] = useState(0);
   const [dragSpacerPx, setDragSpacerPx] = useState(0);
   const [editingSetId, setEditingSetId] = useState<string | null>(null);
+  const [refreshingSetIds, setRefreshingSetIds] = useState<string[]>([]);
   const dragLatestScrollYRef = useRef<number | null>(null);
   const bodyScrollLockRef = useRef<BodyScrollLockState | null>(null);
 
@@ -1964,13 +2208,7 @@ export function ManagerApp() {
         if (set.id !== setId) {
           return set;
         }
-        const filteredTabs = set.tabs.filter((tab) => tab.uid !== tabToDelete.uid);
-        return {
-          ...set,
-          tabs: filteredTabs,
-          groups: set.groups,
-          layout: normalizeLayout(set.layout, set.groups, filteredTabs),
-        };
+        return deleteTabFromHistorySet(set, tabToDelete.uid);
       }),
     }));
     await refreshState(updated.historySets);
@@ -2007,25 +2245,7 @@ export function ManagerApp() {
         if (set.id !== setId) {
           return set;
         }
-        const nextId =
-          set.groups.length === 0 ? 1 : Math.max(...set.groups.map((group) => group.id)) + 1;
-        const newGroup: GroupSnapshot = {
-          uid: createUid('group'),
-          id: nextId,
-          title: '新規グループ',
-          color: 'grey',
-          index: set.groups.length,
-          locked: false,
-        };
-        const nextLayout = [
-          ...normalizeLayout(set.layout, set.groups, set.tabs),
-          { type: 'group', uid: newGroup.uid } as const,
-        ];
-        return {
-          ...set,
-          groups: [...set.groups, newGroup],
-          layout: nextLayout,
-        };
+        return createGroupAtTop(set, createUid('group'));
       }),
     }));
     await refreshState(updated.historySets);
@@ -2076,6 +2296,79 @@ export function ManagerApp() {
       }),
     }));
     await refreshState(updated.historySets);
+  };
+
+  const handleRefreshMetadata = async (setId: string) => {
+    if (refreshingSetIds.includes(setId)) {
+      return;
+    }
+    const targetSet = fullSets.find((set) => set.id === setId);
+    if (!targetSet) {
+      return;
+    }
+    const targetTabs = targetSet.tabs.filter((tab) => shouldRefreshTabMetadata(tab));
+    if (targetTabs.length === 0) {
+      setActionMessage('再取得対象のタブはありません。');
+      return;
+    }
+
+    setRefreshingSetIds((current) => (current.includes(setId) ? current : [...current, setId]));
+    setActionMessage(`タブ情報を再取得しています... (${targetTabs.length}件)`);
+
+    let metadataWindowId: number | null = null;
+    const refreshedByUid = new Map<string, RefreshedTabMetadata>();
+    try {
+      const metadataWindow = await createMetadataRefreshWindow();
+      metadataWindowId = metadataWindow.windowId;
+      const startAt = Date.now();
+
+      for (const tab of targetTabs) {
+        if (Date.now() - startAt >= METADATA_REFRESH_TOTAL_TIMEOUT_MS) {
+          break;
+        }
+        try {
+          await updateTabUrl(metadataWindow.tabId, tab.url);
+          const { metadata } = await waitForTabMetadata(
+            metadataWindow.tabId,
+            tab.url,
+            METADATA_REFRESH_PER_TAB_TIMEOUT_MS,
+          );
+          if (metadata.title || metadata.favIconUrl) {
+            refreshedByUid.set(tab.uid, metadata);
+          }
+        } catch (err) {
+          console.warn('Failed to refresh tab metadata (non-blocking)', {
+            setId,
+            tabUid: tab.uid,
+            error: err,
+          });
+        }
+      }
+
+      const preview = mergeRefreshedTabMetadata(targetSet, refreshedByUid);
+      if (preview.updatedCount > 0) {
+        const updated = await updateState((current) => ({
+          ...current,
+          historySets: current.historySets.map((set) =>
+            set.id === setId ? mergeRefreshedTabMetadata(set, refreshedByUid).set : set,
+          ),
+        }));
+        await refreshState(updated.historySets);
+      }
+
+      const failedCount = targetTabs.length - preview.updatedCount;
+      setActionMessage(
+        `情報再取得: 対象${targetTabs.length}件 / 更新${preview.updatedCount}件 / 失敗${failedCount}件`,
+      );
+    } catch (err) {
+      console.error('Failed to refresh tab metadata', err);
+      setActionMessage(err instanceof Error ? err.message : 'タブ情報の再取得に失敗しました。');
+    } finally {
+      if (metadataWindowId !== null) {
+        await removeWindow(metadataWindowId);
+      }
+      setRefreshingSetIds((current) => current.filter((id) => id !== setId));
+    }
   };
 
   const handleRestoreSet = async (set: HistorySet) => {
@@ -2373,6 +2666,8 @@ export function ManagerApp() {
                           }
                         }}
                         onRestoreSet={() => handleRestoreSet(set)}
+                        onRefreshMetadata={() => handleRefreshMetadata(set.id)}
+                        refreshingMetadata={refreshingSetIds.includes(set.id)}
                         onDeleteSet={() => handleDeleteSet(set.id)}
                         onToggleSetLock={() => handleToggleSetLock(set.id)}
                         onToggleBinding={() => handleToggleManagerBinding(set.id)}

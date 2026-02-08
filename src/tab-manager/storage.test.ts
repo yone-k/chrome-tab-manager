@@ -171,6 +171,52 @@ describe('storage', () => {
     expect(state.historySets[0]?.layout.map((item) => item.type)).toEqual(['group', 'tab']);
   });
 
+  it('タブの favIconUrl は非空文字列のみ保持する', async () => {
+    const storage = createMemoryStorage({
+      tabManagerState: {
+        version: 1,
+        exclusions: [],
+        historySets: [
+          {
+            id: 'set-favicon',
+            createdAt: 3,
+            windowId: 4,
+            name: 'window-favicon',
+            locked: false,
+            managerBinding: null,
+            groups: [],
+            tabs: [
+              {
+                uid: 't-1',
+                title: 'Docs',
+                url: 'https://docs.example.com',
+                index: 0,
+                groupId: null,
+                locked: false,
+                favIconUrl: 'https://docs.example.com/favicon.ico',
+              },
+              {
+                uid: 't-2',
+                title: 'Mail',
+                url: 'https://mail.example.com',
+                index: 1,
+                groupId: null,
+                locked: false,
+                favIconUrl: '   ',
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    const state = await getState(storage);
+    const tabs = state.historySets[0]?.tabs ?? [];
+
+    expect(tabs[0]?.favIconUrl).toBe('https://docs.example.com/favicon.ico');
+    expect(tabs[1]?.favIconUrl).toBeUndefined();
+  });
+
   it('name が無い履歴セットは createdAt 由来で補完する', async () => {
     const createdAt = 1700000000000;
     const storage = createMemoryStorage({

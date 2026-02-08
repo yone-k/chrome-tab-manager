@@ -233,6 +233,7 @@ describe('background commands', () => {
           pinned: false,
           url: 'https://a.example.com',
           title: 'A',
+          favIconUrl: 'https://a.example.com/favicon.ico',
           groupId: 100,
         },
         {
@@ -242,6 +243,7 @@ describe('background commands', () => {
           pinned: false,
           url: 'https://b.example.com',
           title: 'B',
+          favIconUrl: '',
           groupId: 100,
         },
         {
@@ -260,9 +262,19 @@ describe('background commands', () => {
     await runSaveAndCloseCurrentWindow();
 
     expect(mock.removedTabIds.sort((a, b) => a - b)).toEqual([1, 2]);
-    const state = mock.storageData.tabManagerState as { historySets: Array<{ tabs: unknown[] }> };
+    const state = mock.storageData.tabManagerState as {
+      historySets: Array<{
+        tabs: Array<{ title: string; favIconUrl?: string }>;
+      }>;
+    };
     expect(state.historySets).toHaveLength(1);
     expect(state.historySets[0]?.tabs).toHaveLength(2);
+    expect(state.historySets[0]?.tabs[0]).toMatchObject({
+      title: 'A',
+      favIconUrl: 'https://a.example.com/favicon.ico',
+    });
+    expect(state.historySets[0]?.tabs[1]).toMatchObject({ title: 'B' });
+    expect(state.historySets[0]?.tabs[1]?.favIconUrl).toBeUndefined();
   });
 
   it('新規保存時に既存履歴のロック状態を保持する', async () => {

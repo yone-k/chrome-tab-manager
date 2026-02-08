@@ -131,14 +131,21 @@ function normalizeHistorySets(rawSets: unknown): HistorySet[] {
         index: typeof group.index === 'number' ? group.index : 0,
         locked: normalizeLocked(group.locked),
       }));
-      const normalizedTabs = tabs.filter(isRecord).map((tab) => ({
-        uid: typeof tab.uid === 'string' ? tab.uid : createUid('tab'),
-        title: typeof tab.title === 'string' ? tab.title : '',
-        url: typeof tab.url === 'string' ? tab.url : '',
-        index: typeof tab.index === 'number' ? tab.index : 0,
-        groupId: typeof tab.groupId === 'number' ? tab.groupId : null,
-        locked: normalizeLocked(tab.locked),
-      }));
+      const normalizedTabs = tabs.filter(isRecord).map((tab) => {
+        const favIconUrl =
+          typeof tab.favIconUrl === 'string' && tab.favIconUrl.trim().length > 0
+            ? tab.favIconUrl
+            : undefined;
+        return {
+          uid: typeof tab.uid === 'string' ? tab.uid : createUid('tab'),
+          title: typeof tab.title === 'string' ? tab.title : '',
+          url: typeof tab.url === 'string' ? tab.url : '',
+          ...(favIconUrl ? { favIconUrl } : {}),
+          index: typeof tab.index === 'number' ? tab.index : 0,
+          groupId: typeof tab.groupId === 'number' ? tab.groupId : null,
+          locked: normalizeLocked(tab.locked),
+        };
+      });
       const normalizedSet: HistorySet = {
         id: typeof raw.id === 'string' ? raw.id : createUid('set'),
         name: normalizedName,

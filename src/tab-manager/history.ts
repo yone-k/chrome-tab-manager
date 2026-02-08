@@ -7,6 +7,7 @@ export const DEFAULT_NEW_WINDOW_NAME = '新規ウィンドウ';
 export type TabInput = {
   title?: string;
   url?: string;
+  favIconUrl?: string;
   index: number;
   groupId?: number;
   locked?: boolean;
@@ -43,12 +44,14 @@ export function normalizeManualHistorySetName(name: string) {
 function normalizeTab(tab: TabInput): TabSnapshot {
   const title = tab.title?.trim() || tab.url || 'Untitled';
   const url = tab.url ?? '';
+  const favIconUrl = tab.favIconUrl?.trim();
   const groupId = tab.groupId !== undefined && tab.groupId >= 0 ? tab.groupId : null;
 
   return {
     uid: createUid('tab'),
     title,
     url,
+    ...(favIconUrl ? { favIconUrl } : {}),
     index: tab.index,
     groupId,
     locked: tab.locked ?? false,

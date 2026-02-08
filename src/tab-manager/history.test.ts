@@ -14,8 +14,14 @@ describe('buildHistorySet', () => {
         managerWindowId: 5,
       },
       tabs: [
-        { title: 'A', url: 'https://a.com', index: 2, groupId: 1 },
-        { title: 'B', url: 'https://b.com', index: 1, groupId: -1 },
+        {
+          title: 'A',
+          url: 'https://a.com',
+          index: 2,
+          groupId: 1,
+          favIconUrl: 'https://a.com/favicon.ico',
+        },
+        { title: 'B', url: 'https://b.com', index: 1, groupId: -1, favIconUrl: '   ' },
         { title: 'C', url: 'https://c.com', index: 3, groupId: 2 },
       ],
       groups: [
@@ -39,6 +45,8 @@ describe('buildHistorySet', () => {
     });
     expect(result.groups.every((group) => group.locked === false)).toBe(true);
     expect(result.tabs.every((tab) => tab.locked === false)).toBe(true);
+    expect(result.tabs[1]?.favIconUrl).toBe('https://a.com/favicon.ico');
+    expect(result.tabs[0]?.favIconUrl).toBeUndefined();
   });
 
   it('名前が空文字の場合は既定名へフォールバックする', () => {

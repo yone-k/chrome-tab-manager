@@ -1,5 +1,6 @@
 import { normalizeLayout } from '../tab-manager/layout';
 import type { HistorySet, LayoutItem } from '../tab-manager/types';
+import { syncAncestorLocksFromTabs } from './lockState';
 
 export function deleteGroupFromHistorySet(set: HistorySet, groupUid: string): HistorySet {
   const group = set.groups.find((item) => item.uid === groupUid);
@@ -27,10 +28,10 @@ export function deleteGroupFromHistorySet(set: HistorySet, groupUid: string): Hi
     }
   }
 
-  return {
+  return syncAncestorLocksFromTabs({
     ...set,
     groups: nextGroups,
     tabs: nextTabs,
     layout: normalizeLayout(replacedLayout, nextGroups, nextTabs),
-  };
+  });
 }

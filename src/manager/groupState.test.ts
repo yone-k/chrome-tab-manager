@@ -81,4 +81,37 @@ describe('deleteGroupFromHistorySet', () => {
     expect(updated.groups).toEqual([]);
     expect(updated.layout.map((item) => `${item.type}:${item.uid}`)).toEqual(['tab:t-0']);
   });
+
+  it('削除後に残存タブ構成に応じて親ロックを再同期する', () => {
+    const set = makeSet({
+      id: 'set-a',
+      groups: [
+        { uid: 'g-unlocked', id: 1, title: 'Unlocked', color: 'blue', locked: false },
+        { uid: 'g-locked', id: 2, title: 'Locked', color: 'red', locked: true },
+      ],
+      tabs: [
+        {
+          uid: 't-1',
+          title: 'unlocked tab',
+          url: 'https://1.example.com',
+          groupId: 1,
+          locked: false,
+        },
+        {
+          uid: 't-2',
+          title: 'locked tab',
+          url: 'https://2.example.com',
+          groupId: 2,
+          locked: true,
+        },
+      ],
+    });
+
+    const updated = deleteGroupFromHistorySet(set, 'g-unlocked');
+
+    expect(updated.groups.find((group) => group.uid === 'g-locked')?.locked).toBe(true);
+    expect(updated.tabs.find((tab) => tab.uid === 't-1')?.groupId).toBeNull();
+    expect(updated.tabs.find((tab) => tab.uid === 't-1')?.locked).toBe(false);
+    expect(updated.locked).toBe(false);
+  });
 });

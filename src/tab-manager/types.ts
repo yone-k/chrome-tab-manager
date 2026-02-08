@@ -13,6 +13,7 @@ export type TabSnapshot = {
   uid: string;
   title: string;
   url: string;
+  favIconUrl?: string;
   index: number;
   groupId: number | null;
   locked: boolean;
