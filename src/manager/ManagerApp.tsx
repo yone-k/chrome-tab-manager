@@ -51,7 +51,9 @@ import {
 import { createUid } from '../tab-manager/uid';
 import { deleteGroupFromHistorySet } from './groupState';
 import { createGroupAtTop } from './groupCreate';
+import { shouldIgnoreEnterForIme } from './ime';
 import { deleteTabFromHistorySet } from './tabState';
+import { resolveGroupTitleForCommit, resolveSetTitleForCommit } from './titleCommit';
 import {
   applySetLock,
   isGroupEffectivelyLocked,
@@ -885,8 +887,12 @@ function GroupSection({
   }, [isEditing]);
 
   const commitTitle = () => {
-    const nextTitle = draftTitle.trim() || '新規グループ';
+    const nextTitle = resolveGroupTitleForCommit(draftTitle, group.title);
     setIsEditing(false);
+    if (nextTitle === group.title) {
+      setDraftTitle(group.title);
+      return;
+    }
     if (nextTitle !== group.title) {
       onRenameGroup(group.uid, nextTitle);
     }
@@ -899,6 +905,9 @@ function GroupSection({
 
   const handleTitleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key === 'Enter') {
+      if (shouldIgnoreEnterForIme(event)) {
+        return;
+      }
       event.preventDefault();
       commitTitle();
     }
@@ -1087,8 +1096,12 @@ function SetCard({
   }, [titleEditing]);
 
   const commitTitle = () => {
-    const nextTitle = normalizeManualHistorySetName(draftTitle);
+    const nextTitle = resolveSetTitleForCommit(draftTitle, set.name);
     setIsEditing(false);
+    if (nextTitle === set.name) {
+      setDraftTitle(set.name);
+      return;
+    }
     if (nextTitle !== set.name) {
       onRenameSet(nextTitle);
     }
@@ -1101,6 +1114,9 @@ function SetCard({
 
   const handleTitleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key === 'Enter') {
+      if (shouldIgnoreEnterForIme(event)) {
+        return;
+      }
       event.preventDefault();
       commitTitle();
     }
