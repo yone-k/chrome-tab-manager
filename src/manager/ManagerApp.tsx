@@ -62,6 +62,11 @@ import {
 } from './bindingState';
 import { createTabRowActions } from './tabRowActions';
 import { buildFaviconCandidates } from './favicon';
+import {
+  mergeRefreshedTabMetadata,
+  shouldRefreshTabMetadata,
+  type RefreshedTabMetadata,
+} from './metadataRefresh';
 import type { DragItem, DropTarget } from './dragReorder';
 import { applyDragReorder } from './dragReorder';
 import { computeDropGapPx, DEFAULT_DROP_GAP_PX } from './dropGap';
@@ -88,6 +93,8 @@ type ActiveDrop = {
 const SET_LIST_GAP_PX = 4;
 const BLOCK_LIST_GAP_PX = 4;
 const TAB_LIST_GAP_PX = 6;
+const METADATA_REFRESH_PER_TAB_TIMEOUT_MS = 1200;
+const METADATA_REFRESH_TOTAL_TIMEOUT_MS = 20_000;
 
 function getDistanceToRectSquared(
   pointer: { x: number; y: number },
@@ -980,6 +987,8 @@ type SetCardProps = {
   shouldStartEditing: boolean;
   onStartEditingHandled: () => void;
   onRestoreSet: () => void;
+  onRefreshMetadata: () => void;
+  refreshingMetadata: boolean;
   onDeleteSet: () => void;
   onToggleSetLock: () => void;
   onToggleBinding: () => void;
@@ -1004,6 +1013,8 @@ function SetCard({
   shouldStartEditing,
   onStartEditingHandled,
   onRestoreSet,
+  onRefreshMetadata,
+  refreshingMetadata,
   onDeleteSet,
   onToggleSetLock,
   onToggleBinding,
@@ -1090,6 +1101,9 @@ function SetCard({
   const bindingStatusLabel = getBindingStatusLabel(bindingStatus);
   const showBindingIcon = bindingStatus === 'bound-current';
   const isBoundCurrent = bindingStatus === 'bound-current';
+  const hasRefreshableTabs = (fullSet?.tabs ?? set.tabs).some((tab) =>
+    shouldRefreshTabMetadata(tab),
+  );
 
   return (
     <article
@@ -1174,6 +1188,11 @@ function SetCard({
               <Button variant="primary" onClick={onRestoreSet}>
                 すべて復元
               </Button>
+              {hasRefreshableTabs || refreshingMetadata ? (
+                <Button variant="ghost" onClick={onRefreshMetadata} disabled={refreshingMetadata}>
+                  {refreshingMetadata ? '再取得中...' : '情報再取得'}
+                </Button>
+              ) : null}
               <Button variant="ghost" onClick={onDeleteSet} disabled={set.locked}>
                 ウィンドウを削除
               </Button>
@@ -1270,6 +1289,34 @@ async function createRestoreWindow() {
   });
 }
 
+async function createMetadataRefreshWindow() {
+  return new Promise<{ windowId: number; tabId: number }>((resolve, reject) => {
+    chrome.windows.create({ focused: false }, (window: chrome.windows.Window | undefined) => {
+      if (chrome.runtime.lastError) {
+        reject(chrome.runtime.lastError);
+        return;
+      }
+      if (typeof window?.id !== 'number') {
+        reject(new Error('メタ情報再取得用のウィンドウを作成できませんでした。'));
+        return;
+      }
+      const windowId = window.id;
+      chrome.tabs.query({ windowId }, (tabs: chrome.tabs.Tab[]) => {
+        if (chrome.runtime.lastError) {
+          reject(chrome.runtime.lastError);
+          return;
+        }
+        const tab = tabs.find((item) => typeof item.id === 'number');
+        if (typeof tab?.id !== 'number') {
+          reject(new Error('メタ情報再取得用のタブを取得できませんでした。'));
+          return;
+        }
+        resolve({ windowId, tabId: tab.id });
+      });
+    });
+  });
+}
+
 async function getWindowTabCount(windowId: number) {
   return new Promise<number>((resolve, reject) => {
     chrome.tabs.query({ windowId }, (tabs: chrome.tabs.Tab[]) => {
@@ -1282,6 +1329,17 @@ async function getWindowTabCount(windowId: number) {
   });
 }
 
+async function removeWindow(windowId: number) {
+  return new Promise<void>((resolve) => {
+    chrome.windows.remove(windowId, () => {
+      if (chrome.runtime.lastError) {
+        console.warn('Failed to remove temporary window (non-blocking)', chrome.runtime.lastError);
+      }
+      resolve();
+    });
+  });
+}
+
 async function removeTab(tabId: number) {
   return new Promise<void>((resolve, reject) => {
     chrome.tabs.remove(tabId, () => {
@@ -1290,6 +1348,94 @@ async function removeTab(tabId: number) {
         return;
       }
       resolve();
+    });
+  });
+}
+
+async function updateTabUrl(tabId: number, url: string) {
+  return new Promise<chrome.tabs.Tab>((resolve, reject) => {
+    chrome.tabs.update(tabId, { url, active: false }, (tab?: chrome.tabs.Tab) => {
+      if (chrome.runtime.lastError) {
+        reject(chrome.runtime.lastError);
+        return;
+      }
+      if (!tab) {
+        reject(new Error('更新後のタブ情報を取得できませんでした。'));
+        return;
+      }
+      resolve(tab);
+    });
+  });
+}
+
+function resolveRefreshedTabMetadata(tab: chrome.tabs.Tab): RefreshedTabMetadata {
+  const title = typeof tab.title === 'string' ? tab.title.trim() : '';
+  const favIconUrl = typeof tab.favIconUrl === 'string' ? tab.favIconUrl.trim() : '';
+  return {
+    ...(title ? { title } : {}),
+    ...(favIconUrl ? { favIconUrl } : {}),
+  };
+}
+
+async function waitForTabMetadata(
+  tabId: number,
+  expectedUrl: string,
+  timeoutMs = METADATA_REFRESH_PER_TAB_TIMEOUT_MS,
+) {
+  return new Promise<{ metadata: RefreshedTabMetadata; timedOut: boolean }>((resolve) => {
+    let settled = false;
+    let metadata: RefreshedTabMetadata = {};
+    const mergeMetadata = (tab: chrome.tabs.Tab) => {
+      metadata = {
+        ...metadata,
+        ...resolveRefreshedTabMetadata(tab),
+      };
+    };
+
+    const finish = (timedOut: boolean) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearTimeout(timeoutId);
+      chrome.tabs.onUpdated.removeListener(handleUpdated);
+      resolve({ metadata, timedOut });
+    };
+
+    const handleUpdated = (
+      updatedTabId: number,
+      changeInfo: chrome.tabs.TabChangeInfo,
+      tab: chrome.tabs.Tab,
+    ) => {
+      if (updatedTabId !== tabId) {
+        return;
+      }
+      if (!matchesExpectedUrl(expectedUrl, tab, changeInfo)) {
+        return;
+      }
+      mergeMetadata(tab);
+      if (changeInfo.status === 'complete') {
+        finish(false);
+      }
+    };
+
+    const timeoutId = setTimeout(() => {
+      console.debug('Metadata wait timeout reached', { tabId, expectedUrl, timeoutMs });
+      finish(true);
+    }, timeoutMs);
+
+    chrome.tabs.onUpdated.addListener(handleUpdated);
+    chrome.tabs.get(tabId, (tab) => {
+      if (chrome.runtime.lastError || !tab) {
+        return;
+      }
+      if (!matchesExpectedUrl(expectedUrl, tab)) {
+        return;
+      }
+      mergeMetadata(tab);
+      if (tab.status === 'complete') {
+        finish(false);
+      }
     });
   });
 }
@@ -1506,6 +1652,7 @@ export function ManagerApp() {
   const [setDropWidthPx, setSetDropWidthPx] = useState(0);
   const [dragSpacerPx, setDragSpacerPx] = useState(0);
   const [editingSetId, setEditingSetId] = useState<string | null>(null);
+  const [refreshingSetIds, setRefreshingSetIds] = useState<string[]>([]);
   const dragLatestScrollYRef = useRef<number | null>(null);
   const bodyScrollLockRef = useRef<BodyScrollLockState | null>(null);
 
@@ -2105,6 +2252,79 @@ export function ManagerApp() {
     await refreshState(updated.historySets);
   };
 
+  const handleRefreshMetadata = async (setId: string) => {
+    if (refreshingSetIds.includes(setId)) {
+      return;
+    }
+    const targetSet = fullSets.find((set) => set.id === setId);
+    if (!targetSet) {
+      return;
+    }
+    const targetTabs = targetSet.tabs.filter((tab) => shouldRefreshTabMetadata(tab));
+    if (targetTabs.length === 0) {
+      setActionMessage('再取得対象のタブはありません。');
+      return;
+    }
+
+    setRefreshingSetIds((current) => (current.includes(setId) ? current : [...current, setId]));
+    setActionMessage(`タブ情報を再取得しています... (${targetTabs.length}件)`);
+
+    let metadataWindowId: number | null = null;
+    const refreshedByUid = new Map<string, RefreshedTabMetadata>();
+    try {
+      const metadataWindow = await createMetadataRefreshWindow();
+      metadataWindowId = metadataWindow.windowId;
+      const startAt = Date.now();
+
+      for (const tab of targetTabs) {
+        if (Date.now() - startAt >= METADATA_REFRESH_TOTAL_TIMEOUT_MS) {
+          break;
+        }
+        try {
+          await updateTabUrl(metadataWindow.tabId, tab.url);
+          const { metadata } = await waitForTabMetadata(
+            metadataWindow.tabId,
+            tab.url,
+            METADATA_REFRESH_PER_TAB_TIMEOUT_MS,
+          );
+          if (metadata.title || metadata.favIconUrl) {
+            refreshedByUid.set(tab.uid, metadata);
+          }
+        } catch (err) {
+          console.warn('Failed to refresh tab metadata (non-blocking)', {
+            setId,
+            tabUid: tab.uid,
+            error: err,
+          });
+        }
+      }
+
+      const preview = mergeRefreshedTabMetadata(targetSet, refreshedByUid);
+      if (preview.updatedCount > 0) {
+        const updated = await updateState((current) => ({
+          ...current,
+          historySets: current.historySets.map((set) =>
+            set.id === setId ? mergeRefreshedTabMetadata(set, refreshedByUid).set : set,
+          ),
+        }));
+        await refreshState(updated.historySets);
+      }
+
+      const failedCount = targetTabs.length - preview.updatedCount;
+      setActionMessage(
+        `情報再取得: 対象${targetTabs.length}件 / 更新${preview.updatedCount}件 / 失敗${failedCount}件`,
+      );
+    } catch (err) {
+      console.error('Failed to refresh tab metadata', err);
+      setActionMessage(err instanceof Error ? err.message : 'タブ情報の再取得に失敗しました。');
+    } finally {
+      if (metadataWindowId !== null) {
+        await removeWindow(metadataWindowId);
+      }
+      setRefreshingSetIds((current) => current.filter((id) => id !== setId));
+    }
+  };
+
   const handleRestoreSet = async (set: HistorySet) => {
     setActionMessage('タブを復元しています...');
     try {
@@ -2400,6 +2620,8 @@ export function ManagerApp() {
                           }
                         }}
                         onRestoreSet={() => handleRestoreSet(set)}
+                        onRefreshMetadata={() => handleRefreshMetadata(set.id)}
+                        refreshingMetadata={refreshingSetIds.includes(set.id)}
                         onDeleteSet={() => handleDeleteSet(set.id)}
                         onToggleSetLock={() => handleToggleSetLock(set.id)}
                         onToggleBinding={() => handleToggleManagerBinding(set.id)}
