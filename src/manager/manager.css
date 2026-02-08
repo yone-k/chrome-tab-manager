@@ -405,7 +405,7 @@ body {
 
 .manager__tab {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
   align-items: center;
   gap: 6px;
   padding: 3px 5px;
@@ -413,6 +413,25 @@ body {
   background: var(--tm-surface-muted);
   border: 1px solid var(--tm-surface-border);
   position: relative;
+}
+
+.manager__tab-favicon {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  display: block;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.manager__tab-favicon--placeholder {
+  display: inline-grid;
+  place-items: center;
+  border: 1px solid var(--tm-surface-border);
+  background: var(--tm-surface);
+  color: var(--tm-muted-text);
+  font-size: 8px;
+  line-height: 1;
 }
 
 .manager__tab--clickable {

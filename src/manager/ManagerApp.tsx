@@ -61,6 +61,7 @@ import {
   type ManagerContext,
 } from './bindingState';
 import { createTabRowActions } from './tabRowActions';
+import { buildFaviconCandidates } from './favicon';
 import type { DragItem, DropTarget } from './dragReorder';
 import { applyDragReorder } from './dragReorder';
 import { computeDropGapPx, DEFAULT_DROP_GAP_PX } from './dropGap';
@@ -84,8 +85,8 @@ type ActiveDrop = {
   overId: string;
 };
 
-const SET_LIST_GAP_PX = 10;
-const BLOCK_LIST_GAP_PX = 10;
+const SET_LIST_GAP_PX = 4;
+const BLOCK_LIST_GAP_PX = 4;
 const TAB_LIST_GAP_PX = 6;
 
 function getDistanceToRectSquared(
@@ -249,10 +250,35 @@ function OverlayHandle({ compact }: { compact?: boolean }) {
   );
 }
 
+function TabFavicon({ tab }: { tab: Pick<TabSnapshot, 'favIconUrl' | 'url'> }) {
+  const candidates = buildFaviconCandidates(tab);
+  const [candidateIndex, setCandidateIndex] = useState(0);
+
+  const src = candidates[candidateIndex];
+  if (!src) {
+    return (
+      <span className="manager__tab-favicon manager__tab-favicon--placeholder" aria-hidden="true">
+        ●
+      </span>
+    );
+  }
+
+  return (
+    <img
+      className="manager__tab-favicon"
+      src={src}
+      alt=""
+      draggable={false}
+      onError={() => setCandidateIndex((index) => Math.min(index + 1, candidates.length))}
+    />
+  );
+}
+
 function OverlayTabRow({ tab }: { tab: TabSnapshot }) {
   return (
     <div className="manager__tab manager__tab--overlay">
       <OverlayHandle compact />
+      <TabFavicon key={`${tab.uid}:${tab.favIconUrl ?? ''}:${tab.url}`} tab={tab} />
       <div className="manager__tab-main">
         <p className="manager__tab-title">{tab.title}</p>
         <p className="manager__tab-url">{tab.url}</p>
@@ -531,6 +557,7 @@ function TabRow({ tab, setId, reorderEnabled, rowActions, locked, onToggleLock }
         {...attributes}
         {...listeners}
       />
+      <TabFavicon key={`${tab.uid}:${tab.favIconUrl ?? ''}:${tab.url}`} tab={tab} />
       <div className="manager__tab-main">
         <p className="manager__tab-title">
           <span className="manager__title-with-lock">

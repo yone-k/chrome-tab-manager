@@ -126,6 +126,7 @@ async function saveTabsAndClose(
   const tabInputs: TabInput[] = savableTabs.map((tab) => ({
     title: tab.title ?? '',
     url: getTabUrl(tab),
+    favIconUrl: tab.favIconUrl,
     index: tab.index ?? 0,
     groupId: tab.groupId,
   }));
