@@ -1,12 +1,4 @@
-import {
-  Fragment,
-  type KeyboardEvent,
-  type WheelEvent,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from 'react';
+import { Fragment, type KeyboardEvent, useEffect, useMemo, useRef, useState } from 'react';
 
 import {
   DndContext,
@@ -73,7 +65,6 @@ import type { DragItem, DropTarget } from './dragReorder';
 import { applyDragReorder } from './dragReorder';
 import { computeDropGapPx, DEFAULT_DROP_GAP_PX } from './dropGap';
 import { selectDragItemHeight } from './dragHeight';
-import { shouldRelayWheelToPage } from './scrollRelay';
 import './manager.css';
 
 type LoadState = 'loading' | 'ready' | 'error';
@@ -1067,23 +1058,6 @@ function SetCard({
     }
   };
 
-  const handleCardBodyWheel = (event: WheelEvent<HTMLDivElement>) => {
-    const body = event.currentTarget;
-    const shouldRelay = shouldRelayWheelToPage({
-      deltaY: event.deltaY,
-      scrollTop: body.scrollTop,
-      clientHeight: body.clientHeight,
-      scrollHeight: body.scrollHeight,
-    });
-
-    if (!shouldRelay) {
-      return;
-    }
-
-    event.preventDefault();
-    window.scrollBy({ top: event.deltaY, behavior: 'auto' });
-  };
-
   const layoutEntries = buildLayoutEntries(set);
   const shouldShowBlockList = reorderEnabled || layoutEntries.length > 0;
   const bindingStatusLabel = getBindingStatusLabel(bindingStatus);
@@ -1181,7 +1155,7 @@ function SetCard({
         </div>
       </div>
 
-      <div className="manager__card-body" onWheel={handleCardBodyWheel}>
+      <div className="manager__card-body">
         {shouldShowBlockList ? (
           <>
             <div className="manager__group-controls">
