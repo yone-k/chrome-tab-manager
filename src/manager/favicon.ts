@@ -35,8 +35,20 @@ function resolveExtensionId() {
   return id.length > 0 ? id : null;
 }
 
+function hasFaviconPermission() {
+  if (typeof chrome === 'undefined') {
+    return false;
+  }
+  const permissions = chrome.runtime?.getManifest?.().permissions;
+  if (!Array.isArray(permissions)) {
+    return false;
+  }
+  return permissions.includes('favicon');
+}
+
 type BuildFaviconCandidatesOptions = {
   extensionId?: string | null;
+  useExtensionFavicon?: boolean;
 };
 
 export function buildFaviconCandidates(
@@ -54,7 +66,8 @@ export function buildFaviconCandidates(
   const url = normalizeCandidate(tab.url);
   const origin = url ? getOrigin(url) : null;
   const savedFavicon = normalizeCandidate(tab.favIconUrl);
-  const extensionId = options?.extensionId ?? resolveExtensionId();
+  const useExtensionFavicon = options?.useExtensionFavicon ?? hasFaviconPermission();
+  const extensionId = useExtensionFavicon ? (options?.extensionId ?? resolveExtensionId()) : null;
 
   if (savedFavicon && !isBlockedChromeInternalUrl(savedFavicon)) {
     pushUnique(savedFavicon);

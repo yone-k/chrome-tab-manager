@@ -4,6 +4,7 @@ import { buildFaviconCandidates } from './favicon';
 
 describe('buildFaviconCandidates', () => {
   const extensionId = 'test-extension-id';
+  const useExtensionFavicon = true;
 
   it('保存済みfaviconを優先してURLフォールバックを続ける', () => {
     const candidates = buildFaviconCandidates(
@@ -11,7 +12,7 @@ describe('buildFaviconCandidates', () => {
         favIconUrl: 'https://example.com/favicon.ico',
         url: 'https://example.com/page',
       },
-      { extensionId },
+      { extensionId, useExtensionFavicon },
     );
 
     expect(candidates).toEqual([
@@ -27,7 +28,7 @@ describe('buildFaviconCandidates', () => {
         favIconUrl: 'chrome://favicon/',
         url: 'https://example.com/page',
       },
-      { extensionId },
+      { extensionId, useExtensionFavicon },
     );
 
     expect(candidates).toEqual([
@@ -44,7 +45,7 @@ describe('buildFaviconCandidates', () => {
         favIconUrl: fallback,
         url: 'https://example.com',
       },
-      { extensionId },
+      { extensionId, useExtensionFavicon },
     );
 
     expect(candidates).toEqual([fallback]);
@@ -57,5 +58,17 @@ describe('buildFaviconCandidates', () => {
     });
 
     expect(candidates).toEqual([]);
+  });
+
+  it('favicon権限がない場合は拡張フォールバックを使わない', () => {
+    const candidates = buildFaviconCandidates(
+      {
+        favIconUrl: 'https://example.com/favicon.ico',
+        url: 'https://example.com/page',
+      },
+      { extensionId, useExtensionFavicon: false },
+    );
+
+    expect(candidates).toEqual(['https://example.com/favicon.ico']);
   });
 });
