@@ -6,6 +6,10 @@ import { createUid } from './uid';
 
 export const STATE_KEY = 'tabManagerState';
 
+export const CARD_HEIGHT_MIN = 360;
+export const CARD_HEIGHT_MAX = 1080;
+export const CARD_HEIGHT_DEFAULT = 540;
+
 export type StorageAreaLike = {
   get: (keys: string[]) => Promise<Record<string, unknown>>;
   set: (items: Record<string, unknown>) => Promise<void>;
@@ -19,6 +23,7 @@ export function getDefaultState(): TabManagerState {
     restoreLoadingSuppressionEnabled: true,
     removeRestoredTabsEnabled: true,
     themeMode: 'system',
+    cardHeight: null,
   };
 }
 
@@ -106,6 +111,13 @@ function normalizeThemeMode(value: unknown): ThemeMode {
   return 'system';
 }
 
+export function clampCardHeight(value: unknown): number | null {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return null;
+  }
+  return Math.round(Math.max(CARD_HEIGHT_MIN, Math.min(CARD_HEIGHT_MAX, value)));
+}
+
 function normalizeHistorySets(rawSets: unknown): HistorySet[] {
   if (!Array.isArray(rawSets)) {
     return [];
@@ -183,6 +195,7 @@ function coerceState(raw: unknown): TabManagerState {
         ? raw.removeRestoredTabsEnabled
         : defaults.removeRestoredTabsEnabled,
     themeMode: normalizeThemeMode(raw.themeMode),
+    cardHeight: clampCardHeight(raw.cardHeight),
   };
 }
 
@@ -259,6 +272,7 @@ export async function prependHistorySet(
         ? rawState.removeRestoredTabsEnabled
         : defaults.removeRestoredTabsEnabled,
     themeMode: normalizeThemeMode(rawState.themeMode),
+    cardHeight: clampCardHeight(rawState.cardHeight),
     historySets: nextHistorySets,
   };
   await storage.set({ [STATE_KEY]: nextRawState });

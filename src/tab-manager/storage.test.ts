@@ -412,4 +412,101 @@ describe('storage', () => {
 
     await expect(wrapped.set({ tabManagerState: {} })).rejects.toEqual(runtimeLastError);
   });
+
+  it('cardHeight が数値の場合は範囲内にクランプする', async () => {
+    const storage = createMemoryStorage({
+      tabManagerState: {
+        version: 1,
+        historySets: [],
+        exclusions: [],
+        cardHeight: 500,
+      },
+    });
+
+    const state = await getState(storage);
+    expect(state.cardHeight).toBe(500);
+  });
+
+  it('cardHeight が範囲外の場合はクランプする', async () => {
+    const storage = createMemoryStorage({
+      tabManagerState: {
+        version: 1,
+        historySets: [],
+        exclusions: [],
+        cardHeight: 100,
+      },
+    });
+
+    const state = await getState(storage);
+    expect(state.cardHeight).toBe(360);
+  });
+
+  it('cardHeight が上限超の場合はクランプする', async () => {
+    const storage = createMemoryStorage({
+      tabManagerState: {
+        version: 1,
+        historySets: [],
+        exclusions: [],
+        cardHeight: 2000,
+      },
+    });
+
+    const state = await getState(storage);
+    expect(state.cardHeight).toBe(1080);
+  });
+
+  it('cardHeight が null の場合はそのまま null', async () => {
+    const storage = createMemoryStorage({
+      tabManagerState: {
+        version: 1,
+        historySets: [],
+        exclusions: [],
+        cardHeight: null,
+      },
+    });
+
+    const state = await getState(storage);
+    expect(state.cardHeight).toBeNull();
+  });
+
+  it('cardHeight が非数値の場合は null に正規化する', async () => {
+    const storage = createMemoryStorage({
+      tabManagerState: {
+        version: 1,
+        historySets: [],
+        exclusions: [],
+        cardHeight: 'invalid',
+      },
+    });
+
+    const state = await getState(storage);
+    expect(state.cardHeight).toBeNull();
+  });
+
+  it('cardHeight が未定義の場合は null に正規化する', async () => {
+    const storage = createMemoryStorage({
+      tabManagerState: {
+        version: 1,
+        historySets: [],
+        exclusions: [],
+      },
+    });
+
+    const state = await getState(storage);
+    expect(state.cardHeight).toBeNull();
+  });
+
+  it('cardHeight は小数を整数に丸める', async () => {
+    const storage = createMemoryStorage({
+      tabManagerState: {
+        version: 1,
+        historySets: [],
+        exclusions: [],
+        cardHeight: 500.7,
+      },
+    });
+
+    const state = await getState(storage);
+    expect(state.cardHeight).toBe(501);
+  });
 });

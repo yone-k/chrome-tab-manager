@@ -1,8 +1,15 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { Button } from '../components/Button';
 import { DEFAULT_EXCLUSIONS, normalizeExclusions } from '../tab-manager/exclusions';
-import { getState, updateState } from '../tab-manager/storage';
+import {
+  CARD_HEIGHT_DEFAULT,
+  CARD_HEIGHT_MAX,
+  CARD_HEIGHT_MIN,
+  clampCardHeight,
+  getState,
+  updateState,
+} from '../tab-manager/storage';
 import type { ThemeMode } from '../tab-manager/types';
 import {
   applyThemeToDocument,
@@ -19,8 +26,10 @@ export function OptionsApp() {
   const [restoreLoadingSuppressionEnabled, setRestoreLoadingSuppressionEnabled] = useState(true);
   const [removeRestoredTabsEnabled, setRemoveRestoredTabsEnabled] = useState(true);
   const [themeMode, setThemeMode] = useState<ThemeMode>('system');
+  const [cardHeight, setCardHeight] = useState<number | null>(null);
   const [status, setStatus] = useState<StatusState>('idle');
   const [error, setError] = useState<string | null>(null);
+  const lastManualHeightRef = useRef<number>(CARD_HEIGHT_DEFAULT);
 
   useEffect(() => {
     let cancelled = false;
@@ -34,6 +43,10 @@ export function OptionsApp() {
         setRestoreLoadingSuppressionEnabled(stored.restoreLoadingSuppressionEnabled);
         setRemoveRestoredTabsEnabled(stored.removeRestoredTabsEnabled);
         setThemeMode(stored.themeMode);
+        setCardHeight(stored.cardHeight);
+        if (typeof stored.cardHeight === 'number') {
+          lastManualHeightRef.current = stored.cardHeight;
+        }
       } catch (err) {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : '設定の読み込みに失敗しました。');
@@ -66,12 +79,14 @@ export function OptionsApp() {
     setError(null);
     try {
       const normalized = normalizeExclusions(exclusionsText.split('\n'));
+      const nextCardHeight = cardHeight === null ? null : clampCardHeight(cardHeight);
       await updateState((state) => ({
         ...state,
         exclusions: normalized,
         restoreLoadingSuppressionEnabled,
         removeRestoredTabsEnabled,
         themeMode,
+        cardHeight: nextCardHeight ?? null,
       }));
       setExclusionsText(normalized.join('\n'));
       setStatus('saved');
@@ -92,11 +107,14 @@ export function OptionsApp() {
         restoreLoadingSuppressionEnabled: true,
         removeRestoredTabsEnabled: true,
         themeMode: 'system',
+        cardHeight: null,
       }));
       setExclusionsText(normalized.join('\n'));
       setRestoreLoadingSuppressionEnabled(true);
       setRemoveRestoredTabsEnabled(true);
       setThemeMode('system');
+      setCardHeight(null);
+      lastManualHeightRef.current = CARD_HEIGHT_DEFAULT;
       setStatus('saved');
     } catch (err) {
       setStatus('error');
@@ -185,6 +203,41 @@ export function OptionsApp() {
             />
             <span className="options__radio-label">ダーク</span>
           </label>
+        </fieldset>
+        <fieldset className="options__fieldset">
+          <legend className="options__legend">カードの高さ</legend>
+          <label className="options__label">
+            <input
+              type="checkbox"
+              checked={cardHeight === null}
+              onChange={() => {
+                if (cardHeight === null) {
+                  setCardHeight(lastManualHeightRef.current);
+                } else {
+                  lastManualHeightRef.current = cardHeight;
+                  setCardHeight(null);
+                }
+              }}
+            />
+            自動（画面サイズに合わせる）
+          </label>
+          {cardHeight !== null ? (
+            <div className="options__range-group">
+              <input
+                className="options__range-input"
+                type="range"
+                min={CARD_HEIGHT_MIN}
+                max={CARD_HEIGHT_MAX}
+                value={cardHeight}
+                onChange={(event) => {
+                  const value = Number(event.target.value);
+                  setCardHeight(value);
+                  lastManualHeightRef.current = value;
+                }}
+              />
+              <span className="options__range-value">{cardHeight}px</span>
+            </div>
+          ) : null}
         </fieldset>
       </section>
 

@@ -46,4 +46,5 @@ export type TabManagerState = {
   restoreLoadingSuppressionEnabled: boolean;
   removeRestoredTabsEnabled: boolean;
   themeMode: ThemeMode;
+  cardHeight: number | null;
 };
