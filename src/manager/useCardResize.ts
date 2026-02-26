@@ -12,39 +12,40 @@ type UseCardResizeResult = {
   isResizing: boolean;
 };
 
-export function useCardResize({
-  onHeightChange,
-}: UseCardResizeOptions): UseCardResizeResult {
+export function useCardResize({ onHeightChange }: UseCardResizeOptions): UseCardResizeResult {
   const [resizingHeight, setResizingHeight] = useState<number | null>(null);
   const isResizing = resizingHeight !== null;
   const startYRef = useRef(0);
   const startHeightRef = useRef(0);
   const onHeightChangeRef = useRef(onHeightChange);
-  onHeightChangeRef.current = onHeightChange;
+  useEffect(() => {
+    onHeightChangeRef.current = onHeightChange;
+  }, [onHeightChange]);
 
-  const handleResizeStart = useCallback(
-    (event: React.MouseEvent) => {
-      event.stopPropagation();
-      event.preventDefault();
+  const handleResizeStart = useCallback((event: React.MouseEvent) => {
+    event.stopPropagation();
+    event.preventDefault();
 
-      const card = (event.target as HTMLElement).closest('.manager__card');
-      if (!card) {
-        return;
-      }
-      const initialHeight = card.getBoundingClientRect().height;
-      startYRef.current = event.clientY;
-      startHeightRef.current = initialHeight;
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) {
+      return;
+    }
+    const card = target.closest('.manager__card');
+    if (!card) {
+      return;
+    }
+    const initialHeight = card.getBoundingClientRect().height;
+    startYRef.current = event.clientY;
+    startHeightRef.current = initialHeight;
 
-      const clamped = clampCardHeight(initialHeight);
-      if (clamped !== null) {
-        setResizingHeight(clamped);
-      }
+    const clamped = clampCardHeight(initialHeight);
+    if (clamped !== null) {
+      setResizingHeight(clamped);
+    }
 
-      document.body.style.userSelect = 'none';
-      document.body.style.cursor = 'ns-resize';
-    },
-    [],
-  );
+    document.body.style.userSelect = 'none';
+    document.body.style.cursor = 'ns-resize';
+  }, []);
 
   useEffect(() => {
     if (!isResizing) {

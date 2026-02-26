@@ -1788,14 +1788,11 @@ export function ManagerApp() {
     };
   }, []);
 
-  const handleCardHeightChange = useCallback(
-    (height: number) => {
-      const clamped = clampCardHeight(height);
-      setState((current) => ({ ...current, cardHeight: clamped }));
-      void updateState((current) => ({ ...current, cardHeight: clamped }));
-    },
-    [],
-  );
+  const handleCardHeightChange = useCallback((height: number) => {
+    const clamped = clampCardHeight(height);
+    setState((current) => ({ ...current, cardHeight: clamped }));
+    void updateState((current) => ({ ...current, cardHeight: clamped }));
+  }, []);
 
   const { resizingHeight, handleResizeStart } = useCardResize({
     onHeightChange: handleCardHeightChange,
