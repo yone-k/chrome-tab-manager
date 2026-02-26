@@ -40,7 +40,7 @@ import {
   GROUP_FILTER_UNGROUPED,
 } from '../tab-manager/filters';
 import { normalizeLayout } from '../tab-manager/layout';
-import { getState, STATE_KEY, updateState } from '../tab-manager/storage';
+import { getState, STATE_KEY, updateState, clampCardHeight } from '../tab-manager/storage';
 import type { GroupSnapshot, HistorySet, TabSnapshot, ThemeMode } from '../tab-manager/types';
 import {
   applyThemeToDocument,
@@ -84,6 +84,7 @@ import { applyDragReorder } from './dragReorder';
 import { computeDropGapPx, DEFAULT_DROP_GAP_PX } from './dropGap';
 import { selectDragItemHeight } from './dragHeight';
 import { resolveScrollFadeState } from './scrollFade';
+import { useCardResize } from './useCardResize';
 import './manager.css';
 
 type LoadState = 'loading' | 'ready' | 'error';
@@ -1022,6 +1023,8 @@ type SetCardProps = {
   rowActions: TabRowActions;
   activeDrop: ActiveDrop | null;
   dropGapPx: number;
+  cardHeight: number | null;
+  onResizeStart: (event: React.MouseEvent) => void;
 };
 
 function SetCard({
@@ -1048,6 +1051,8 @@ function SetCard({
   rowActions,
   activeDrop,
   dropGapPx,
+  cardHeight,
+  onResizeStart,
 }: SetCardProps) {
   const totalTabs = fullSet?.tabs.length ?? set.tabs.length;
   const visibleTabs = set.tabs.length;
@@ -1173,6 +1178,7 @@ function SetCard({
     <article
       ref={setDragRef}
       className={`manager__card${isDragging ? ' manager__card--dragging' : ''}`}
+      style={cardHeight !== null ? { height: `${cardHeight}px` } : undefined}
     >
       <div className="manager__card-header">
         <div className="manager__card-header-main">
@@ -1297,6 +1303,13 @@ function SetCard({
           ) : null}
         </div>
       </div>
+      <div
+        className="manager__resize-handle"
+        onMouseDown={onResizeStart}
+        role="separator"
+        aria-orientation="horizontal"
+        aria-label="カードの高さを調整"
+      />
     </article>
   );
 }
@@ -1710,6 +1723,7 @@ export function ManagerApp() {
     restoreLoadingSuppressionEnabled?: boolean;
     removeRestoredTabsEnabled?: boolean;
     themeMode?: ThemeMode;
+    cardHeight?: number | null;
   }>({ status: 'loading' });
   const [query, setQuery] = useState('');
   const [setFilter, setSetFilter] = useState(SET_FILTER_ALL);
@@ -1746,6 +1760,7 @@ export function ManagerApp() {
           restoreLoadingSuppressionEnabled: stored.restoreLoadingSuppressionEnabled,
           removeRestoredTabsEnabled: stored.removeRestoredTabsEnabled,
           themeMode: stored.themeMode,
+          cardHeight: stored.cardHeight,
         });
       } catch (err) {
         if (!cancelled) {
@@ -1772,6 +1787,18 @@ export function ManagerApp() {
       chrome.storage.onChanged.removeListener(handleChange);
     };
   }, []);
+
+  const handleCardHeightChange = useCallback((height: number) => {
+    const clamped = clampCardHeight(height);
+    setState((current) => ({ ...current, cardHeight: clamped }));
+    void updateState((current) => ({ ...current, cardHeight: clamped }));
+  }, []);
+
+  const { resizingHeight, handleResizeStart } = useCardResize({
+    onHeightChange: handleCardHeightChange,
+  });
+
+  const effectiveCardHeight = resizingHeight ?? state.cardHeight ?? null;
 
   const themeMode = state.themeMode ?? 'system';
   useEffect(() => {
@@ -1925,6 +1952,7 @@ export function ManagerApp() {
       restoreLoadingSuppressionEnabled: current.restoreLoadingSuppressionEnabled ?? true,
       removeRestoredTabsEnabled: current.removeRestoredTabsEnabled ?? true,
       themeMode: current.themeMode ?? 'system',
+      cardHeight: current.cardHeight ?? null,
     }));
   };
 
@@ -2683,6 +2711,8 @@ export function ManagerApp() {
                         rowActions={rowActions}
                         activeDrop={activeDrop}
                         dropGapPx={dropGapPx}
+                        cardHeight={effectiveCardHeight}
+                        onResizeStart={handleResizeStart}
                       />
                       <DropZone
                         id={`zone:set:${rightDropIndex}:right`}

@@ -227,6 +227,39 @@ body {
   line-height: 1.25;
 }
 
+.options__fieldset {
+  margin: 0;
+  padding: 0;
+  border: none;
+  display: grid;
+  gap: 4px;
+}
+
+.options__legend {
+  font-weight: 600;
+  font-size: 11px;
+}
+
+.options__range-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.options__range-input {
+  flex: 1;
+  min-width: 0;
+  accent-color: var(--tm-accent, #2563eb);
+}
+
+.options__range-value {
+  min-width: 5em;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--tm-text-secondary, #555);
+}
+
 @media (max-width: 768px) {
   #root {
     padding: 6px;
