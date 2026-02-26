@@ -85,6 +85,7 @@ import { computeDropGapPx, DEFAULT_DROP_GAP_PX } from './dropGap';
 import { selectDragItemHeight } from './dragHeight';
 import { resolveScrollFadeState } from './scrollFade';
 import { useCardResize } from './useCardResize';
+import { resolveCardClassName } from './cardClass';
 import './manager.css';
 
 type LoadState = 'loading' | 'ready' | 'error';
@@ -342,13 +343,13 @@ function OverlayUngroupedTabBlock({ tab }: { tab: TabSnapshot }) {
   );
 }
 
-function OverlaySetCard({ set }: { set: HistorySet }) {
+function OverlaySetCard({ set, isBoundCurrent }: { set: HistorySet; isBoundCurrent: boolean }) {
   const totalTabs = set.tabs.length;
   const tabSummary = `保存済みタブ: ${totalTabs}件`;
   const layoutEntries = buildLayoutEntries(set);
 
   return (
-    <article className="manager__card manager__card--overlay">
+    <article className={`${resolveCardClassName(false, isBoundCurrent)} manager__card--overlay`}>
       <div className="manager__card-header">
         <div className="manager__card-header-main">
           <OverlayHandle />
@@ -1177,7 +1178,7 @@ function SetCard({
   return (
     <article
       ref={setDragRef}
-      className={`manager__card${isDragging ? ' manager__card--dragging' : ''}`}
+      className={resolveCardClassName(isDragging, isBoundCurrent)}
       style={cardHeight !== null ? { height: `${cardHeight}px` } : undefined}
     >
       <div className="manager__card-header">
@@ -1852,9 +1853,11 @@ export function ManagerApp() {
     if (dragItem.type === 'set') {
       const set = fullSets.find((item) => item.id === dragItem.setId);
       if (set) {
+        const overlayBoundCurrent =
+          resolveBindingStatus(set.managerBinding, currentManagerContext) === 'bound-current';
         return (
           <div className="manager__drag-overlay">
-            <OverlaySetCard set={set} />
+            <OverlaySetCard set={set} isBoundCurrent={overlayBoundCurrent} />
           </div>
         );
       }
@@ -1890,7 +1893,7 @@ export function ManagerApp() {
         <span className="manager__drag-label">{dragLabel}</span>
       </div>
     );
-  }, [activeDrag, fullSets]);
+  }, [activeDrag, fullSets, currentManagerContext]);
 
   const setOptions = useMemo(() => {
     if (state.status !== 'ready' || !state.data) {
