@@ -17,6 +17,7 @@ export type TabSnapshot = {
   index: number;
   groupId: number | null;
   locked: boolean;
+  sessionId?: string;
 };
 
 export type ManagerBinding = {
