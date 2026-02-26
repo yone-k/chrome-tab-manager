@@ -11,6 +11,7 @@ export type TabInput = {
   index: number;
   groupId?: number;
   locked?: boolean;
+  sessionId?: string;
 };
 
 export type GroupInput = {
@@ -55,6 +56,7 @@ function normalizeTab(tab: TabInput): TabSnapshot {
     index: tab.index,
     groupId,
     locked: tab.locked ?? false,
+    ...(tab.sessionId ? { sessionId: tab.sessionId } : {}),
   };
 }
 

@@ -6,12 +6,14 @@ import {
   type GroupInput,
   type TabInput,
 } from '../tab-manager/history';
-import { getState, prependHistorySet } from '../tab-manager/storage';
+import { getState, prependHistorySet, updateState } from '../tab-manager/storage';
+import type { HistorySet } from '../tab-manager/types';
 import {
   ensureManagerTabInWindow,
   filterOutManagerTabs,
   openManagerTabInCurrentWindow,
 } from './managerTab';
+import { getRecentlyClosedSessions, matchSessionIds } from './sessions';
 
 const MAX_HISTORY_SETS = 200;
 
@@ -99,6 +101,34 @@ async function resolveWindowContext(clickedTab?: chrome.tabs.Tab): Promise<Windo
   };
 }
 
+function enrichHistorySetWithSessionIds(
+  set: HistorySet,
+  urlToSessionIds: Map<string, string[]>,
+): HistorySet {
+  if (urlToSessionIds.size === 0) {
+    return set;
+  }
+  // 各 URL の sessionId を貪欲に消費するためにコピーを作成
+  const remaining = new Map<string, string[]>();
+  for (const [url, ids] of urlToSessionIds) {
+    remaining.set(url, [...ids]);
+  }
+  return {
+    ...set,
+    tabs: set.tabs.map((tab) => {
+      const ids = remaining.get(tab.url);
+      if (!ids || ids.length === 0) {
+        return tab;
+      }
+      const sessionId = ids.shift();
+      if (sessionId === undefined) {
+        return tab;
+      }
+      return { ...tab, sessionId };
+    }),
+  };
+}
+
 async function saveTabsAndClose(
   windowId: number,
   sourceTabs: chrome.tabs.Tab[],
@@ -158,6 +188,43 @@ async function saveTabsAndClose(
   }
 
   await closeTabs(tabIds);
+
+  // sessionId 取得・付与（ベストエフォート）
+  try {
+    const closedTabUrls = savableTabs.map((tab) => getTabUrl(tab));
+    let sessions = await getRecentlyClosedSessions(closedTabUrls.length + 10);
+    let sessionIdMap = matchSessionIds(closedTabUrls, sessions);
+    // マッチ件数が0の場合は100ms待機して1回リトライ
+    if (sessionIdMap.size === 0 && closedTabUrls.length > 0) {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      sessions = await getRecentlyClosedSessions(closedTabUrls.length + 10);
+      sessionIdMap = matchSessionIds(closedTabUrls, sessions);
+    }
+    if (sessionIdMap.size > 0) {
+      // sessionIdMap (key: closedTabUrls index, value: sessionId) を
+      // URL → sessionId[] のマップに変換。buildHistorySet でタブが index ソートされるため、
+      // 配列インデックスではなく URL ベースで HistorySet のタブと照合する。
+      const urlToSessionIds = new Map<string, string[]>();
+      for (const [urlIdx, sessionId] of sessionIdMap) {
+        const url = closedTabUrls[urlIdx];
+        if (url === undefined) continue;
+        const list = urlToSessionIds.get(url) ?? [];
+        list.push(sessionId);
+        urlToSessionIds.set(url, list);
+      }
+      await updateState((current) => ({
+        ...current,
+        historySets: current.historySets.map((item) => {
+          if (item.id !== historySet.id) {
+            return item;
+          }
+          return enrichHistorySetWithSessionIds(item, urlToSessionIds);
+        }),
+      }));
+    }
+  } catch (err) {
+    console.warn('Failed to enrich history set with session IDs', err);
+  }
 }
 
 export async function runOpenManagerInCurrentWindow(clickedTab?: chrome.tabs.Tab) {

@@ -496,6 +496,163 @@ describe('storage', () => {
     expect(state.cardHeight).toBeNull();
   });
 
+  it('タブの sessionId は文字列のみ保持する', async () => {
+    const storage = createMemoryStorage({
+      tabManagerState: {
+        version: 1,
+        exclusions: [],
+        historySets: [
+          {
+            id: 'set-session',
+            createdAt: 3,
+            windowId: 4,
+            name: 'window-session',
+            locked: false,
+            managerBinding: null,
+            groups: [],
+            tabs: [
+              {
+                uid: 't-1',
+                title: 'Docs',
+                url: 'https://docs.example.com',
+                index: 0,
+                groupId: null,
+                locked: false,
+                sessionId: 'session-abc-123',
+              },
+              {
+                uid: 't-2',
+                title: 'Mail',
+                url: 'https://mail.example.com',
+                index: 1,
+                groupId: null,
+                locked: false,
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    const state = await getState(storage);
+    const tabs = state.historySets[0]?.tabs ?? [];
+
+    expect(tabs[0]?.sessionId).toBe('session-abc-123');
+    expect(tabs[1]?.sessionId).toBeUndefined();
+  });
+
+  it('sessionId が空文字の場合は除外される', async () => {
+    const storage = createMemoryStorage({
+      tabManagerState: {
+        version: 1,
+        exclusions: [],
+        historySets: [
+          {
+            id: 'set-empty-sid',
+            createdAt: 1,
+            windowId: 1,
+            name: 'test',
+            locked: false,
+            managerBinding: null,
+            groups: [],
+            tabs: [
+              {
+                uid: 't-1',
+                title: 'Tab',
+                url: 'https://example.com',
+                index: 0,
+                groupId: null,
+                locked: false,
+                sessionId: '',
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    const state = await getState(storage);
+    expect(state.historySets[0]?.tabs[0]?.sessionId).toBeUndefined();
+  });
+
+  it('sessionId が null の場合は除外される', async () => {
+    const storage = createMemoryStorage({
+      tabManagerState: {
+        version: 1,
+        exclusions: [],
+        historySets: [
+          {
+            id: 'set-null-sid',
+            createdAt: 1,
+            windowId: 1,
+            name: 'test',
+            locked: false,
+            managerBinding: null,
+            groups: [],
+            tabs: [
+              {
+                uid: 't-1',
+                title: 'Tab',
+                url: 'https://example.com',
+                index: 0,
+                groupId: null,
+                locked: false,
+                sessionId: null,
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    const state = await getState(storage);
+    expect(state.historySets[0]?.tabs[0]?.sessionId).toBeUndefined();
+  });
+
+  it('sessionId が数値や真偽値の場合は除外される', async () => {
+    const storage = createMemoryStorage({
+      tabManagerState: {
+        version: 1,
+        exclusions: [],
+        historySets: [
+          {
+            id: 'set-bad-sid',
+            createdAt: 1,
+            windowId: 1,
+            name: 'test',
+            locked: false,
+            managerBinding: null,
+            groups: [],
+            tabs: [
+              {
+                uid: 't-num',
+                title: 'Num',
+                url: 'https://num.example.com',
+                index: 0,
+                groupId: null,
+                locked: false,
+                sessionId: 12345,
+              },
+              {
+                uid: 't-bool',
+                title: 'Bool',
+                url: 'https://bool.example.com',
+                index: 1,
+                groupId: null,
+                locked: false,
+                sessionId: true,
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    const state = await getState(storage);
+    expect(state.historySets[0]?.tabs[0]?.sessionId).toBeUndefined();
+    expect(state.historySets[0]?.tabs[1]?.sessionId).toBeUndefined();
+  });
+
   it('cardHeight は小数を整数に丸める', async () => {
     const storage = createMemoryStorage({
       tabManagerState: {

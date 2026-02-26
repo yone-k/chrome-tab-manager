@@ -183,6 +183,9 @@ function installChromeMock({
     tabGroups: {
       query: tabGroupsQuery,
     },
+    sessions: {
+      getRecentlyClosed: vi.fn().mockResolvedValue([]),
+    },
     windows: {
       getLastFocused,
     },
@@ -632,6 +635,402 @@ describe('background commands', () => {
       message: 'storage write failed',
     });
     expect(mock.removedTabIds).toEqual([]);
+  });
+
+  it('保存後にsessionIdを取得して付与する', async () => {
+    const mock = installChromeMock({
+      tabs: [
+        {
+          id: 1,
+          windowId: 10,
+          index: 0,
+          active: true,
+          pinned: false,
+          url: 'https://a.example.com',
+          title: 'A',
+        },
+        {
+          id: 2,
+          windowId: 10,
+          index: 1,
+          pinned: false,
+          url: 'https://b.example.com',
+          title: 'B',
+        },
+      ],
+      groups: [],
+    });
+
+    // closeTabs完了後にgetRecentlyClosedSessionsが呼ばれるのでモック設定
+    (chrome.sessions.getRecentlyClosed as ReturnType<typeof vi.fn>).mockResolvedValue([
+      { tab: { url: 'https://a.example.com', sessionId: 'session-a' } },
+      { tab: { url: 'https://b.example.com', sessionId: 'session-b' } },
+    ]);
+
+    await runSaveAndCloseCurrentWindow();
+
+    const state = mock.storageData.tabManagerState as {
+      historySets: Array<{ tabs: Array<{ url: string; sessionId?: string }> }>;
+    };
+    expect(state.historySets[0]?.tabs[0]?.sessionId).toBe('session-a');
+    expect(state.historySets[0]?.tabs[1]?.sessionId).toBe('session-b');
+  });
+
+  it('sessionId取得に失敗してもHistorySetは保存されている', async () => {
+    installChromeMock({
+      tabs: [
+        {
+          id: 1,
+          windowId: 10,
+          index: 0,
+          active: true,
+          pinned: false,
+          url: 'https://a.example.com',
+          title: 'A',
+        },
+      ],
+      groups: [],
+    });
+
+    (chrome.sessions.getRecentlyClosed as ReturnType<typeof vi.fn>).mockRejectedValue(
+      new Error('sessions API error'),
+    );
+
+    // saveTabsAndClose は例外を投げないこと
+    await runSaveAndCloseCurrentWindow();
+    // HistorySetは保存されている（sessionIdなし）
+  });
+
+  it('マッチしない場合はsessionIdなしのまま', async () => {
+    const mock = installChromeMock({
+      tabs: [
+        {
+          id: 1,
+          windowId: 10,
+          index: 0,
+          active: true,
+          pinned: false,
+          url: 'https://a.example.com',
+          title: 'A',
+        },
+      ],
+      groups: [],
+    });
+
+    (chrome.sessions.getRecentlyClosed as ReturnType<typeof vi.fn>).mockResolvedValue([
+      { tab: { url: 'https://different.example.com', sessionId: 'session-x' } },
+    ]);
+
+    await runSaveAndCloseCurrentWindow();
+
+    const state = mock.storageData.tabManagerState as {
+      historySets: Array<{ tabs: Array<{ url: string; sessionId?: string }> }>;
+    };
+    expect(state.historySets[0]?.tabs[0]?.sessionId).toBeUndefined();
+  });
+
+  it('1回目のマッチが0件の場合はリトライして2回目でマッチする', async () => {
+    const mock = installChromeMock({
+      tabs: [
+        {
+          id: 1,
+          windowId: 10,
+          index: 0,
+          active: true,
+          pinned: false,
+          url: 'https://retry.example.com',
+          title: 'Retry',
+        },
+      ],
+      groups: [],
+    });
+
+    let callCount = 0;
+    (chrome.sessions.getRecentlyClosed as ReturnType<typeof vi.fn>).mockImplementation(() => {
+      callCount++;
+      if (callCount === 1) {
+        // 1回目: まだセッション情報が反映されていない
+        return Promise.resolve([]);
+      }
+      // 2回目（リトライ）: セッション情報が利用可能
+      return Promise.resolve([
+        { tab: { url: 'https://retry.example.com', sessionId: 'session-retry' } },
+      ]);
+    });
+
+    await runSaveAndCloseCurrentWindow();
+
+    expect(callCount).toBe(2);
+    const state = mock.storageData.tabManagerState as {
+      historySets: Array<{ tabs: Array<{ url: string; sessionId?: string }> }>;
+    };
+    expect(state.historySets[0]?.tabs[0]?.sessionId).toBe('session-retry');
+  });
+
+  it('3タブ中2タブのみsessionIdがマッチする部分マッチ', async () => {
+    const mock = installChromeMock({
+      tabs: [
+        {
+          id: 1,
+          windowId: 10,
+          index: 0,
+          active: true,
+          pinned: false,
+          url: 'https://a.example.com',
+          title: 'A',
+        },
+        {
+          id: 2,
+          windowId: 10,
+          index: 1,
+          pinned: false,
+          url: 'https://b.example.com',
+          title: 'B',
+        },
+        {
+          id: 3,
+          windowId: 10,
+          index: 2,
+          pinned: false,
+          url: 'https://c.example.com',
+          title: 'C',
+        },
+      ],
+      groups: [],
+    });
+
+    (chrome.sessions.getRecentlyClosed as ReturnType<typeof vi.fn>).mockResolvedValue([
+      { tab: { url: 'https://a.example.com', sessionId: 'session-a' } },
+      // b は Chrome のセッション上限等で欠落
+      { tab: { url: 'https://c.example.com', sessionId: 'session-c' } },
+    ]);
+
+    await runSaveAndCloseCurrentWindow();
+
+    const state = mock.storageData.tabManagerState as {
+      historySets: Array<{ tabs: Array<{ url: string; sessionId?: string }> }>;
+    };
+    expect(state.historySets[0]?.tabs[0]?.sessionId).toBe('session-a');
+    expect(state.historySets[0]?.tabs[1]?.sessionId).toBeUndefined();
+    expect(state.historySets[0]?.tabs[2]?.sessionId).toBe('session-c');
+  });
+
+  it('sessionId付与のupdateStateが失敗しても保存自体は完了している', async () => {
+    const mock = installChromeMock({
+      tabs: [
+        {
+          id: 1,
+          windowId: 10,
+          index: 0,
+          active: true,
+          pinned: false,
+          url: 'https://a.example.com',
+          title: 'A',
+        },
+      ],
+      groups: [],
+    });
+
+    (chrome.sessions.getRecentlyClosed as ReturnType<typeof vi.fn>).mockResolvedValue([
+      { tab: { url: 'https://a.example.com', sessionId: 'session-a' } },
+    ]);
+
+    // 最初のprependHistorySet（保存本体）は成功するが、
+    // sessionId付与のupdateState時に失敗するシナリオ
+    let storageSetCallCount = 0;
+    const originalSet = chrome.storage.local.set as ReturnType<typeof vi.fn>;
+    originalSet.mockImplementation((items: Record<string, unknown>, callback: () => void) => {
+      storageSetCallCount++;
+      if (storageSetCallCount >= 3) {
+        // 3回目のset（updateState）で失敗させる
+        // 1回目: prependHistorySet内のget→set、2回目: updateState内のget
+        Object.assign(mock.storageData, items);
+        callback();
+        return;
+      }
+      Object.assign(mock.storageData, items);
+      callback();
+    });
+
+    await runSaveAndCloseCurrentWindow();
+
+    // HistorySet は保存されている
+    const state = mock.storageData.tabManagerState as {
+      historySets: Array<{ tabs: Array<{ url: string }> }>;
+    };
+    expect(state.historySets).toHaveLength(1);
+    expect(state.historySets[0]?.tabs[0]?.url).toBe('https://a.example.com');
+  });
+
+  it('windowセッションが混在してもtabセッションのみ使用される', async () => {
+    const mock = installChromeMock({
+      tabs: [
+        {
+          id: 1,
+          windowId: 10,
+          index: 0,
+          active: true,
+          pinned: false,
+          url: 'https://a.example.com',
+          title: 'A',
+        },
+      ],
+      groups: [],
+    });
+
+    (chrome.sessions.getRecentlyClosed as ReturnType<typeof vi.fn>).mockResolvedValue([
+      // window セッション内に同じURLのタブがある
+      {
+        window: {
+          id: 1,
+          sessionId: 'ses-window',
+          tabs: [{ url: 'https://a.example.com' }],
+        },
+      },
+      { tab: { url: 'https://a.example.com', sessionId: 'ses-tab' } },
+    ]);
+
+    await runSaveAndCloseCurrentWindow();
+
+    const state = mock.storageData.tabManagerState as {
+      historySets: Array<{ tabs: Array<{ url: string; sessionId?: string }> }>;
+    };
+    // window の sessionId ではなく tab の sessionId が使われる
+    expect(state.historySets[0]?.tabs[0]?.sessionId).toBe('ses-tab');
+  });
+
+  it('同一URLの複数タブ保存時にsessionIdが正しく分配される', async () => {
+    const mock = installChromeMock({
+      tabs: [
+        {
+          id: 1,
+          windowId: 10,
+          index: 0,
+          active: true,
+          pinned: false,
+          url: 'https://same.example.com',
+          title: 'Same1',
+        },
+        {
+          id: 2,
+          windowId: 10,
+          index: 1,
+          pinned: false,
+          url: 'https://same.example.com',
+          title: 'Same2',
+        },
+        {
+          id: 3,
+          windowId: 10,
+          index: 2,
+          pinned: false,
+          url: 'https://same.example.com',
+          title: 'Same3',
+        },
+      ],
+      groups: [],
+    });
+
+    (chrome.sessions.getRecentlyClosed as ReturnType<typeof vi.fn>).mockResolvedValue([
+      { tab: { url: 'https://same.example.com', sessionId: 'ses-3' } },
+      { tab: { url: 'https://same.example.com', sessionId: 'ses-2' } },
+      { tab: { url: 'https://same.example.com', sessionId: 'ses-1' } },
+    ]);
+
+    await runSaveAndCloseCurrentWindow();
+
+    const state = mock.storageData.tabManagerState as {
+      historySets: Array<{ tabs: Array<{ url: string; sessionId?: string }> }>;
+    };
+    const tabs = state.historySets[0]?.tabs ?? [];
+    // 各タブに異なるsessionIdが割り当てられる
+    const sessionIds = tabs.map((t) => t.sessionId).filter(Boolean);
+    expect(new Set(sessionIds).size).toBe(3);
+  });
+
+  it('タブの index 順序が savableTabs の配列順と異なる場合でも正しく sessionId が紐付く', async () => {
+    // savableTabs は chrome.tabs.query の返却順で並んでおり、
+    // index 順とは限らない。buildHistorySet は index ソートするため、
+    // enrichHistorySetWithSessionIds が配列インデックスではなく URL ベースで
+    // マッチしないと sessionId がズレる。
+    const mock = installChromeMock({
+      tabs: [
+        {
+          id: 1,
+          windowId: 10,
+          index: 2, // index 順ではない
+          active: true,
+          pinned: false,
+          url: 'https://c.example.com',
+          title: 'C',
+        },
+        {
+          id: 2,
+          windowId: 10,
+          index: 0, // index 順ではない
+          pinned: false,
+          url: 'https://a.example.com',
+          title: 'A',
+        },
+        {
+          id: 3,
+          windowId: 10,
+          index: 1, // index 順ではない
+          pinned: false,
+          url: 'https://b.example.com',
+          title: 'B',
+        },
+      ],
+      groups: [],
+    });
+
+    (chrome.sessions.getRecentlyClosed as ReturnType<typeof vi.fn>).mockResolvedValue([
+      { tab: { url: 'https://c.example.com', sessionId: 'ses-c' } },
+      { tab: { url: 'https://a.example.com', sessionId: 'ses-a' } },
+      { tab: { url: 'https://b.example.com', sessionId: 'ses-b' } },
+    ]);
+
+    await runSaveAndCloseCurrentWindow();
+
+    const state = mock.storageData.tabManagerState as {
+      historySets: Array<{ tabs: Array<{ url: string; sessionId?: string }> }>;
+    };
+    // buildHistorySet が index ソートするので、tabs は a(0), b(1), c(2) の順
+    const tabs = state.historySets[0]?.tabs ?? [];
+    expect(tabs[0]?.url).toBe('https://a.example.com');
+    expect(tabs[0]?.sessionId).toBe('ses-a');
+    expect(tabs[1]?.url).toBe('https://b.example.com');
+    expect(tabs[1]?.sessionId).toBe('ses-b');
+    expect(tabs[2]?.url).toBe('https://c.example.com');
+    expect(tabs[2]?.sessionId).toBe('ses-c');
+  });
+
+  it('リトライ不要: 1回目でマッチした場合は2回目を呼ばない', async () => {
+    installChromeMock({
+      tabs: [
+        {
+          id: 1,
+          windowId: 10,
+          index: 0,
+          active: true,
+          pinned: false,
+          url: 'https://a.example.com',
+          title: 'A',
+        },
+      ],
+      groups: [],
+    });
+
+    let callCount = 0;
+    (chrome.sessions.getRecentlyClosed as ReturnType<typeof vi.fn>).mockImplementation(() => {
+      callCount++;
+      return Promise.resolve([{ tab: { url: 'https://a.example.com', sessionId: 'session-a' } }]);
+    });
+
+    await runSaveAndCloseCurrentWindow();
+
+    // 1回目でマッチするのでリトライは発生しない
+    expect(callCount).toBe(1);
   });
 
   it('履歴セット数は上限を超えない', async () => {

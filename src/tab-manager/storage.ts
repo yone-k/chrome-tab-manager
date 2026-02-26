@@ -156,6 +156,9 @@ function normalizeHistorySets(rawSets: unknown): HistorySet[] {
           index: typeof tab.index === 'number' ? tab.index : 0,
           groupId: typeof tab.groupId === 'number' ? tab.groupId : null,
           locked: normalizeLocked(tab.locked),
+          ...(typeof tab.sessionId === 'string' && tab.sessionId.length > 0
+            ? { sessionId: tab.sessionId }
+            : {}),
         };
       });
       const normalizedSet: HistorySet = {
