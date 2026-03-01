@@ -14,8 +14,7 @@ export async function moveTabToWindow(
   windowId: number,
   index: number,
 ): Promise<chrome.tabs.Tab> {
-  const result = await chrome.tabs.move(tabId, { windowId, index });
-  return Array.isArray(result) ? result[0] : result;
+  return chrome.tabs.move(tabId, { windowId, index });
 }
 
 /**

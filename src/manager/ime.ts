@@ -2,11 +2,9 @@ type ImeAwareEnterEvent = {
   key: string;
   isComposing?: boolean;
   keyCode?: number;
-  which?: number;
   nativeEvent?: {
     isComposing?: boolean;
     keyCode?: number;
-    which?: number;
   };
 };
 
@@ -20,7 +18,6 @@ export function shouldIgnoreEnterForIme(event: ImeAwareEnterEvent) {
   }
 
   const keyCode = event.keyCode ?? event.nativeEvent?.keyCode;
-  const which = event.which ?? event.nativeEvent?.which;
 
-  return keyCode === 229 || which === 229;
+  return keyCode === 229;
 }

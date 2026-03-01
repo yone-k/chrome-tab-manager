@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import { DEFAULT_RESTORE_LOADING_THRESHOLD, shouldSuppressRestoreLoading } from './restorePolicy';
+import { shouldSuppressRestoreLoading } from './restorePolicy';
 
 describe('restorePolicy', () => {
   it('有効で閾値以上のタブ数なら読み込みを抑制する', () => {
     const result = shouldSuppressRestoreLoading({
       enabled: true,
-      tabCount: DEFAULT_RESTORE_LOADING_THRESHOLD,
+      tabCount: 2,
     });
 
     expect(result).toBe(true);

@@ -6,12 +6,6 @@ import {
   syncAncestorLocksFromTabs,
 } from './lockState';
 
-type TabKey = string;
-
-function buildTabKey(tab: TabSnapshot): TabKey {
-  return tab.uid;
-}
-
 type CleanupOptions = {
   pruneEmptyGroups?: boolean;
 };
@@ -21,9 +15,9 @@ export function cleanupHistorySet(
   restoredTabs: TabSnapshot[],
   options: CleanupOptions = {},
 ) {
-  const restoredKeys = new Set(restoredTabs.map(buildTabKey));
+  const restoredUids = new Set(restoredTabs.map((tab) => tab.uid));
   const remainingTabs = set.tabs.filter(
-    (tab) => !restoredKeys.has(buildTabKey(tab)) || isTabEffectivelyLocked(set, tab),
+    (tab) => !restoredUids.has(tab.uid) || isTabEffectivelyLocked(set, tab),
   );
   const shouldPruneEmptyGroups = options.pruneEmptyGroups ?? false;
   const remainingGroupIds = new Set(
