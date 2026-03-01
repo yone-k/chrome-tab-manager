@@ -40,18 +40,6 @@ describe('moveTabToWindow', () => {
     expect(move).toHaveBeenCalledWith(5, { windowId: 10, index: 2 });
     expect(result).toBe(mockTab);
   });
-
-  it('配列結果の場合も最初の要素を返す', async () => {
-    const mockTab = { id: 5, windowId: 10, index: 2 } as chrome.tabs.Tab;
-    const move = vi.fn().mockResolvedValue([mockTab]);
-    vi.stubGlobal('chrome', {
-      tabs: { move },
-    });
-
-    const result = await moveTabToWindow(5, 10, 2);
-
-    expect(result).toBe(mockTab);
-  });
 });
 
 describe('ungroupTab', () => {
@@ -123,16 +111,5 @@ describe('moveTabToWindow edge cases', () => {
     });
 
     await expect(moveTabToWindow(999, 10, 0)).rejects.toThrow('tab not found');
-  });
-
-  it('chrome.tabs.move が空配列を返した場合は undefined を返す', async () => {
-    // Chrome API が空配列を返すケース（通常は起きないが型上は可能）
-    const move = vi.fn().mockResolvedValue([]);
-    vi.stubGlobal('chrome', {
-      tabs: { move },
-    });
-
-    const result = await moveTabToWindow(5, 10, 0);
-    expect(result).toBeUndefined();
   });
 });

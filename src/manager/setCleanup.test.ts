@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { HistorySet } from '../tab-manager/types';
-import { removeSetsEmptiedSince, removeSetsWithNoTabs } from './setCleanup';
+import { removeSetsEmptiedSince } from './setCleanup';
 
 function createSet(id: string, tabCount: number): HistorySet {
   return {
@@ -23,13 +23,6 @@ function createSet(id: string, tabCount: number): HistorySet {
     layout: [],
   };
 }
-
-describe('removeSetsWithNoTabs', () => {
-  it('タブ0件のセットを除外する', () => {
-    const result = removeSetsWithNoTabs([createSet('a', 1), createSet('b', 0), createSet('c', 2)]);
-    expect(result.map((set) => set.id)).toEqual(['a', 'c']);
-  });
-});
 
 describe('removeSetsEmptiedSince', () => {
   it('移動によって新たに空になったセットを除外する', () => {

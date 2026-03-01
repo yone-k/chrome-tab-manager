@@ -1,9 +1,5 @@
 import type { HistorySet } from '../tab-manager/types';
 
-export function removeSetsWithNoTabs(sets: HistorySet[]) {
-  return sets.filter((set) => set.tabs.length > 0);
-}
-
 export function removeSetsEmptiedSince(previousSets: HistorySet[], nextSets: HistorySet[]) {
   const previousTabCountById = new Map(previousSets.map((set) => [set.id, set.tabs.length]));
 
