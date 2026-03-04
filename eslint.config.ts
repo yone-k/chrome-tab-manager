@@ -6,7 +6,7 @@ import globals from 'globals';
 import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
-  { ignores: ['dist', '.tmp_scaffold'] },
+  { ignores: ['dist', '.tmp_scaffold', '.takt'] },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {

@@ -2529,13 +2529,14 @@ export function ManagerApp() {
     }
     setActionMessage('グループを復元しています...');
     try {
-      const windowId = await getCurrentWindowId();
-      const baseTabIndex = await getWindowTabCount(windowId);
       const tabs = targetSet.tabs.filter((tab) => tab.groupId === groupId);
       if (tabs.length === 0) {
         setActionMessage('復元できるタブがありません。');
         return;
       }
+      const restoreWindow = await createRestoreWindow();
+      const windowId = restoreWindow.windowId;
+      const baseTabIndex = await getWindowTabCount(windowId);
       const { restoredTabs, failedTabs, sessionRestoredCount } = await restoreTabs(
         tabs,
         [group],
@@ -2543,6 +2544,13 @@ export function ManagerApp() {
         restoreLoadingSuppressionEnabled,
         baseTabIndex,
       );
+      if (restoreWindow.initialTabId !== null) {
+        try {
+          await removeTab(restoreWindow.initialTabId);
+        } catch (err) {
+          console.error('Failed to remove initial tab in restore window', err);
+        }
+      }
       if (removeRestoredTabsEnabled) {
         const updated = await updateState((current) => ({
           ...current,
