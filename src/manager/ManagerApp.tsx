@@ -67,6 +67,7 @@ import { resolveRestoreTarget } from './restoreTarget';
 import { restoreSession, moveTabToWindow, ungroupTab } from './sessionRestore';
 import { removeSetsEmptiedSince } from './setCleanup';
 import { matchesExpectedUrl } from './urlMatch';
+import { restoreGroupWithRetry } from './groupRestore';
 import {
   getBindingStatusLabel,
   resolveBindingStatus,
@@ -1591,42 +1592,6 @@ async function waitForTabUrl(tabId: number, expectedUrl: string, timeoutMs = 300
   });
 }
 
-async function groupTabs(windowId: number, tabIds: number[]) {
-  return new Promise<number>((resolve, reject) => {
-    chrome.tabs.group({ createProperties: { windowId }, tabIds }, (groupId: number) => {
-      if (chrome.runtime.lastError) {
-        reject(chrome.runtime.lastError);
-        return;
-      }
-      resolve(groupId);
-    });
-  });
-}
-
-async function updateTabGroup(groupId: number, group: GroupSnapshot) {
-  return new Promise<void>((resolve, reject) => {
-    chrome.tabGroups.update(groupId, { title: group.title, color: group.color }, () => {
-      if (chrome.runtime.lastError) {
-        reject(chrome.runtime.lastError);
-        return;
-      }
-      resolve();
-    });
-  });
-}
-
-async function moveTabGroup(groupId: number, index: number) {
-  return new Promise<void>((resolve, reject) => {
-    chrome.tabGroups.move(groupId, { index }, () => {
-      if (chrome.runtime.lastError) {
-        reject(chrome.runtime.lastError);
-        return;
-      }
-      resolve();
-    });
-  });
-}
-
 async function restoreTabs(
   tabs: TabSnapshot[],
   groups: GroupSnapshot[],
@@ -1721,22 +1686,15 @@ async function restoreTabs(
     if (!tabIds || tabIds.length === 0) {
       continue;
     }
-    let newGroupId: number | null = null;
-    try {
-      newGroupId = await groupTabs(windowId, tabIds);
-    } catch (err) {
-      console.error('Failed to create tab group', err);
+    const newGroupId = await restoreGroupWithRetry(
+      windowId,
+      tabIds,
+      group.title,
+      group.color,
+      baseTabIndex + group.index,
+    );
+    if (newGroupId === null) {
       continue;
-    }
-    try {
-      await updateTabGroup(newGroupId, group);
-    } catch (err) {
-      console.error('Failed to update tab group', err);
-    }
-    try {
-      await moveTabGroup(newGroupId, baseTabIndex + group.index);
-    } catch (err) {
-      console.error('Failed to move tab group', err);
     }
   }
 
