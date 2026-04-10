@@ -1375,6 +1375,18 @@ async function createRestoreWindow() {
   });
 }
 
+async function removeInitialRestoreTab(initialTabId: number | null) {
+  if (initialTabId === null) {
+    return;
+  }
+
+  try {
+    await removeTab(initialTabId);
+  } catch (err) {
+    console.error('Failed to remove initial tab in restore window', err);
+  }
+}
+
 async function createMetadataRefreshWindow() {
   return new Promise<{ windowId: number; tabId: number }>((resolve, reject) => {
     chrome.windows.create({ focused: false }, (window: chrome.windows.Window | undefined) => {
@@ -2434,15 +2446,8 @@ export function ManagerApp() {
         restoreLoadingSuppressionEnabled,
         baseTabIndex,
       );
-      const initialTabId = restoreWindow?.initialTabId ?? null;
       if (restoreWindow) {
-        if (initialTabId !== null) {
-          try {
-            await removeTab(initialTabId);
-          } catch (err) {
-            console.error('Failed to remove initial tab in restore window', err);
-          }
-        }
+        await removeInitialRestoreTab(restoreWindow.initialTabId);
       }
       if (removeRestoredTabsEnabled) {
         const updated = await updateState((current) => ({
@@ -2487,13 +2492,20 @@ export function ManagerApp() {
     }
     setActionMessage('グループを復元しています...');
     try {
-      const windowId = await getCurrentWindowId();
-      const baseTabIndex = await getWindowTabCount(windowId);
       const tabs = targetSet.tabs.filter((tab) => tab.groupId === groupId);
       if (tabs.length === 0) {
         setActionMessage('復元できるタブがありません。');
         return;
       }
+      const currentManager = await getCurrentManagerContext();
+      const restoreTarget = resolveRestoreTarget(
+        targetSet.managerBinding,
+        currentManager.tabId,
+        currentManager.windowId,
+      );
+      const restoreWindow = restoreTarget === 'new-window' ? await createRestoreWindow() : null;
+      const windowId = restoreWindow?.windowId ?? currentManager.windowId;
+      const baseTabIndex = await getWindowTabCount(windowId);
       const { restoredTabs, failedTabs, sessionRestoredCount } = await restoreTabs(
         tabs,
         [group],
@@ -2501,6 +2513,9 @@ export function ManagerApp() {
         restoreLoadingSuppressionEnabled,
         baseTabIndex,
       );
+      if (restoreWindow) {
+        await removeInitialRestoreTab(restoreWindow.initialTabId);
+      }
       if (removeRestoredTabsEnabled) {
         const updated = await updateState((current) => ({
           ...current,
