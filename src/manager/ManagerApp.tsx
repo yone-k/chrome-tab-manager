@@ -62,12 +62,11 @@ import {
   toggleTabLockWithPropagation,
 } from './lockState';
 import { cleanupHistorySet } from './restoreCleanup';
-import { shouldSuppressRestoreLoading } from './restorePolicy';
 import { resolveRestoreTarget } from './restoreTarget';
-import { restoreSession, moveTabToWindow, ungroupTab } from './sessionRestore';
 import { removeSetsEmptiedSince } from './setCleanup';
 import { matchesExpectedUrl } from './urlMatch';
-import { restoreGroupWithRetry } from './groupRestore';
+import { restoreTabs } from './restoreTabs';
+import { buildRestoreActionMessage } from './restoreActionMessage';
 import {
   getBindingStatusLabel,
   resolveBindingStatus,
@@ -1538,207 +1537,6 @@ async function waitForTabMetadata(
   });
 }
 
-async function createTab(windowId: number, url: string, index: number) {
-  return new Promise<chrome.tabs.Tab>((resolve, reject) => {
-    chrome.tabs.create({ windowId, url, active: false, index }, (tab: chrome.tabs.Tab) => {
-      if (chrome.runtime.lastError) {
-        reject(chrome.runtime.lastError);
-        return;
-      }
-      resolve(tab);
-    });
-  });
-}
-
-async function discardTab(tabId: number) {
-  return new Promise<void>((resolve) => {
-    chrome.tabs.discard(tabId, () => {
-      if (chrome.runtime.lastError) {
-        console.warn('Failed to discard tab (non-blocking)', chrome.runtime.lastError);
-      }
-      resolve();
-    });
-  });
-}
-
-async function waitForTabUrl(tabId: number, expectedUrl: string, timeoutMs = 3000) {
-  return new Promise<boolean>((resolve) => {
-    let settled = false;
-    const finish = (matched: boolean) => {
-      if (settled) {
-        return;
-      }
-      settled = true;
-      clearTimeout(timeoutId);
-      chrome.tabs.onUpdated.removeListener(handleUpdated);
-      resolve(matched);
-    };
-
-    const handleUpdated = (
-      updatedTabId: number,
-      changeInfo: chrome.tabs.TabChangeInfo,
-      tab: chrome.tabs.Tab,
-    ) => {
-      if (updatedTabId !== tabId) {
-        return;
-      }
-      if (matchesExpectedUrl(expectedUrl, tab, changeInfo)) {
-        finish(true);
-      }
-    };
-
-    const timeoutId = setTimeout(() => {
-      console.debug('Discard wait timeout reached', { tabId, expectedUrl, timeoutMs });
-      finish(false);
-    }, timeoutMs);
-
-    chrome.tabs.onUpdated.addListener(handleUpdated);
-    chrome.tabs.get(tabId, (tab) => {
-      if (chrome.runtime.lastError || !tab) {
-        return;
-      }
-      if (matchesExpectedUrl(expectedUrl, tab)) {
-        finish(true);
-      }
-    });
-  });
-}
-
-async function restoreTabs(
-  tabs: TabSnapshot[],
-  groups: GroupSnapshot[],
-  windowId: number,
-  restoreLoadingSuppressionEnabled: boolean,
-  baseTabIndex: number,
-) {
-  const sortedTabs = [...tabs].sort((a, b) => a.index - b.index);
-  const shouldDiscard = shouldSuppressRestoreLoading({
-    enabled: restoreLoadingSuppressionEnabled,
-    tabCount: sortedTabs.length,
-  });
-
-  // Phase 0: sessionId ありのタブを sessions.restore() で復元
-  const sessionRestoredTabs: Array<{ snapshot: TabSnapshot; tab: chrome.tabs.Tab }> = [];
-  const fallbackTabs: TabSnapshot[] = [];
-  let sessionRestoredCount = 0;
-
-  for (const tab of sortedTabs) {
-    if (!tab.sessionId) {
-      fallbackTabs.push(tab);
-      continue;
-    }
-    try {
-      const session = await restoreSession(tab.sessionId);
-      if (!session.tab || session.tab.id === undefined) {
-        fallbackTabs.push(tab);
-        continue;
-      }
-      const restoredTab = session.tab;
-      sessionRestoredCount++;
-
-      try {
-        if (restoredTab.windowId !== windowId) {
-          await moveTabToWindow(restoredTab.id!, windowId, baseTabIndex + tab.index);
-        }
-      } catch (err) {
-        console.warn('Failed to move session-restored tab to target window', err);
-      }
-
-      try {
-        if (restoredTab.groupId !== undefined && restoredTab.groupId !== -1) {
-          await ungroupTab(restoredTab.id!);
-        }
-      } catch (err) {
-        console.warn('Failed to ungroup session-restored tab', err);
-      }
-
-      sessionRestoredTabs.push({ snapshot: tab, tab: restoredTab });
-    } catch (err) {
-      console.warn('Failed to restore session, falling back to createTab', err);
-      fallbackTabs.push(tab);
-    }
-  }
-
-  // Phase 1: sessionId なし + Phase 0 フォールバック分を createTab で並列作成
-  const creationResults = await Promise.allSettled(
-    fallbackTabs.map((tab) => createTab(windowId, tab.url, baseTabIndex + tab.index)),
-  );
-  const createdTabs: Array<{ snapshot: TabSnapshot; tab: chrome.tabs.Tab }> = [];
-  const failedTabs: TabSnapshot[] = [];
-  creationResults.forEach((result, index) => {
-    const snapshot = fallbackTabs[index];
-    if (!snapshot) {
-      return;
-    }
-    if (result.status === 'fulfilled') {
-      createdTabs.push({ snapshot, tab: result.value });
-      return;
-    }
-    console.error('Failed to create tab', result.reason);
-    failedTabs.push(snapshot);
-  });
-
-  // 全復元タブ = Phase 0 + Phase 1
-  const allRestoredTabs = [...sessionRestoredTabs, ...createdTabs];
-
-  // Phase 2: グループ復元
-  const groupTabIds = new Map<number, number[]>();
-  for (const { snapshot, tab } of allRestoredTabs) {
-    if (snapshot.groupId === null || tab.id === undefined) {
-      continue;
-    }
-    const list = groupTabIds.get(snapshot.groupId) ?? [];
-    list.push(tab.id);
-    groupTabIds.set(snapshot.groupId, list);
-  }
-
-  const sortedGroups = [...groups].sort((a, b) => a.index - b.index);
-  for (const group of sortedGroups) {
-    const tabIds = groupTabIds.get(group.id);
-    if (!tabIds || tabIds.length === 0) {
-      continue;
-    }
-    const newGroupId = await restoreGroupWithRetry(
-      windowId,
-      tabIds,
-      group.title,
-      group.color,
-      baseTabIndex + group.index,
-    );
-    if (newGroupId === null) {
-      continue;
-    }
-  }
-
-  // Phase 3: shouldDiscard 時のメモリ最適化
-  if (shouldDiscard) {
-    const restoredSnapshots = await Promise.all(
-      allRestoredTabs.map(async ({ snapshot, tab }) => {
-        if (tab.id === undefined) {
-          return snapshot;
-        }
-        const matched = await waitForTabUrl(tab.id, snapshot.url);
-        if (!matched) {
-          console.warn('Skip discard because tab url confirmation failed', {
-            tabId: tab.id,
-            expectedUrl: snapshot.url,
-          });
-          return snapshot;
-        }
-        await discardTab(tab.id);
-        return snapshot;
-      }),
-    );
-    return { restoredTabs: restoredSnapshots, failedTabs, sessionRestoredCount };
-  }
-
-  return {
-    restoredTabs: allRestoredTabs.map((item) => item.snapshot),
-    failedTabs,
-    sessionRestoredCount,
-  };
-}
-
 export function ManagerApp() {
   const optionsUrl = chrome.runtime.getURL('options.html');
   const [state, setState] = useState<{
@@ -2439,13 +2237,14 @@ export function ManagerApp() {
       const restoreWindow = restoreTarget === 'new-window' ? await createRestoreWindow() : null;
       const windowId = restoreWindow?.windowId ?? currentManager.windowId;
       const baseTabIndex = await getWindowTabCount(windowId);
-      const { restoredTabs, failedTabs, sessionRestoredCount } = await restoreTabs(
-        targetSet.tabs,
-        targetSet.groups,
-        windowId,
-        restoreLoadingSuppressionEnabled,
-        baseTabIndex,
-      );
+      const { restoredTabs, failedTabs, sessionRestoredCount, skippedDuplicateCount } =
+        await restoreTabs(
+          targetSet.tabs,
+          targetSet.groups,
+          windowId,
+          restoreLoadingSuppressionEnabled,
+          baseTabIndex,
+        );
       if (restoreWindow) {
         await removeInitialRestoreTab(restoreWindow.initialTabId);
       }
@@ -2463,19 +2262,16 @@ export function ManagerApp() {
         await refreshState(updated.historySets);
       }
       const total = targetSet.tabs.length;
-      if (failedTabs.length > 0) {
-        setActionMessage(
-          sessionRestoredCount > 0
-            ? `${total}件中${restoredTabs.length}件のタブを復元しました（${sessionRestoredCount}件が履歴付き）。`
-            : `${total}件中${restoredTabs.length}件のタブを復元しました。`,
-        );
-      } else if (sessionRestoredCount > 0 && sessionRestoredCount === total) {
-        setActionMessage(`タブを復元しました（全${total}件が履歴付き）。`);
-      } else if (sessionRestoredCount > 0) {
-        setActionMessage(`${total}件中${sessionRestoredCount}件が履歴付きで復元されました。`);
-      } else {
-        setActionMessage('タブを復元しました。');
-      }
+      setActionMessage(
+        buildRestoreActionMessage(
+          'タブ',
+          total,
+          restoredTabs.length,
+          failedTabs.length,
+          sessionRestoredCount,
+          skippedDuplicateCount,
+        ),
+      );
     } catch (err) {
       console.error('Failed to restore tabs', err);
       setActionMessage(
@@ -2506,13 +2302,8 @@ export function ManagerApp() {
       const restoreWindow = restoreTarget === 'new-window' ? await createRestoreWindow() : null;
       const windowId = restoreWindow?.windowId ?? currentManager.windowId;
       const baseTabIndex = await getWindowTabCount(windowId);
-      const { restoredTabs, failedTabs, sessionRestoredCount } = await restoreTabs(
-        tabs,
-        [group],
-        windowId,
-        restoreLoadingSuppressionEnabled,
-        baseTabIndex,
-      );
+      const { restoredTabs, failedTabs, sessionRestoredCount, skippedDuplicateCount } =
+        await restoreTabs(tabs, [group], windowId, restoreLoadingSuppressionEnabled, baseTabIndex);
       if (restoreWindow) {
         await removeInitialRestoreTab(restoreWindow.initialTabId);
       }
@@ -2529,19 +2320,16 @@ export function ManagerApp() {
         }));
         await refreshState(updated.historySets);
       }
-      if (failedTabs.length > 0) {
-        setActionMessage(
-          sessionRestoredCount > 0
-            ? `${tabs.length}件中${restoredTabs.length}件のタブを復元しました（${sessionRestoredCount}件が履歴付き）。`
-            : `${tabs.length}件中${restoredTabs.length}件のタブを復元しました。`,
-        );
-      } else if (sessionRestoredCount > 0 && sessionRestoredCount === tabs.length) {
-        setActionMessage(`グループを復元しました（全${tabs.length}件が履歴付き）。`);
-      } else if (sessionRestoredCount > 0) {
-        setActionMessage(`${tabs.length}件中${sessionRestoredCount}件が履歴付きで復元されました。`);
-      } else {
-        setActionMessage('グループを復元しました。');
-      }
+      setActionMessage(
+        buildRestoreActionMessage(
+          'グループ',
+          tabs.length,
+          restoredTabs.length,
+          failedTabs.length,
+          sessionRestoredCount,
+          skippedDuplicateCount,
+        ),
+      );
     } catch (err) {
       console.error('Failed to restore group', err);
       setActionMessage(err instanceof Error ? err.message : 'グループの復元に失敗しました。');
@@ -2553,7 +2341,7 @@ export function ManagerApp() {
     try {
       const windowId = await getCurrentWindowId();
       const baseTabIndex = await getWindowTabCount(windowId);
-      const { restoredTabs, sessionRestoredCount } = await restoreTabs(
+      const { restoredTabs, sessionRestoredCount, skippedDuplicateCount } = await restoreTabs(
         [tab],
         [],
         windowId,
@@ -2575,7 +2363,18 @@ export function ManagerApp() {
       }
       if (restoredTabs.length === 1) {
         setActionMessage(
-          sessionRestoredCount > 0 ? 'タブを復元しました（履歴付き）。' : 'タブを復元しました。',
+          skippedDuplicateCount > 0
+            ? buildRestoreActionMessage(
+                'タブ',
+                1,
+                restoredTabs.length,
+                0,
+                sessionRestoredCount,
+                skippedDuplicateCount,
+              )
+            : sessionRestoredCount > 0
+              ? 'タブを復元しました（履歴付き）。'
+              : 'タブを復元しました。',
         );
       } else {
         setActionMessage('タブの復元に失敗しました。');
