@@ -27,6 +27,18 @@ async function groupTabs(windowId: number, tabIds: number[]) {
   });
 }
 
+export async function addTabsToExistingGroup(groupId: number, tabIds: number[]) {
+  return new Promise<void>((resolve, reject) => {
+    chrome.tabs.group({ groupId, tabIds }, () => {
+      if (chrome.runtime.lastError) {
+        reject(chrome.runtime.lastError);
+        return;
+      }
+      resolve();
+    });
+  });
+}
+
 async function updateTabGroup(groupId: number, title: string, color: chrome.tabGroups.ColorEnum) {
   return new Promise<void>((resolve, reject) => {
     chrome.tabGroups.update(groupId, { title, color }, () => {

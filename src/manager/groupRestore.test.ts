@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { restoreGroupWithRetry } from './groupRestore';
+import { addTabsToExistingGroup, restoreGroupWithRetry } from './groupRestore';
 
 type ChromeRuntimeState = {
   lastError: Error | null;
@@ -238,5 +238,42 @@ describe('restoreGroupWithRetry', () => {
 
     expect(result).toBe(91);
     expect(warnSpy).toHaveBeenCalledWith('Failed to move tab group', expect.any(Error));
+  });
+});
+
+describe('addTabsToExistingGroup', () => {
+  beforeEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('既存グループにタブを追加できる', async () => {
+    const { tabsGroup } = stubChrome();
+    tabsGroup.mockImplementation(
+      (_options: chrome.tabs.GroupOptions, callback: (groupId: number) => void) => {
+        callback(91);
+      },
+    );
+
+    await addTabsToExistingGroup(91, [10, 11]);
+
+    expect(tabsGroup).toHaveBeenCalledTimes(1);
+    expect(tabsGroup).toHaveBeenCalledWith({ groupId: 91, tabIds: [10, 11] }, expect.any(Function));
+  });
+
+  it('Chrome API エラー時にリジェクトする', async () => {
+    const { runtime, tabsGroup } = stubChrome();
+    const lastError = new Error('group failed');
+    tabsGroup.mockImplementation(
+      (_options: chrome.tabs.GroupOptions, callback: (groupId: number) => void) => {
+        runtime.lastError = lastError;
+        callback(-1);
+      },
+    );
+
+    await expect(addTabsToExistingGroup(91, [10, 11])).rejects.toBe(lastError);
   });
 });

@@ -56,9 +56,7 @@ describe('ManagerApp handleRestoreGroup', () => {
 
   it('新規復元ウィンドウの初期タブをグループ復元後に削除する', () => {
     const source = getRestoreGroupHandlerSource();
-    const restoreTabsIndex = source.indexOf(
-      'const { restoredTabs, failedTabs, sessionRestoredCount }',
-    );
+    const restoreTabsIndex = source.indexOf('await restoreTabs(');
     const removeInitialTabIndex = source.indexOf(
       'await removeInitialRestoreTab(restoreWindow.initialTabId)',
     );
