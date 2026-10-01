@@ -63,6 +63,7 @@ import {
 } from './lockState';
 import { removeRestoredTabsFromHistorySets } from './restoreCleanup';
 import { resolveRestoreTarget } from './restoreTarget';
+import { pinSetsToFront, resolveStoredSetDropIndex } from './pinnedOrder';
 import { removeSetsEmptiedSince } from './setCleanup';
 import { matchesExpectedUrl } from './urlMatch';
 import { restoreTabs } from './restoreTabs';
@@ -1744,7 +1745,15 @@ export function ManagerApp() {
       groupFilter: activeGroupFilter,
     });
   }, [activeGroupFilter, query, setFilter, state]);
-  const visibleSets = reorderEnabled ? fullSets : filteredSets;
+  const visibleSets = useMemo(
+    () =>
+      pinSetsToFront(
+        reorderEnabled ? fullSets : filteredSets,
+        (set) =>
+          resolveBindingStatus(set.managerBinding, currentManagerContext) === 'bound-current',
+      ),
+    [currentManagerContext, filteredSets, fullSets, reorderEnabled],
+  );
   const activeSetDragId = activeDrag?.dragItem.type === 'set' ? activeDrag.dragItem.setId : null;
   const activeSetDragIndex =
     activeSetDragId === null ? -1 : visibleSets.findIndex((set) => set.id === activeSetDragId);
@@ -1916,7 +1925,15 @@ export function ManagerApp() {
       return;
     }
 
-    const reorderedSets = applyDragReorder(fullSets, data.dragItem, dropTarget);
+    // 表示上はリンク中のセットを先頭に寄せているため、保存順のインデックスへ変換する
+    const storedDropTarget =
+      dropTarget.type === 'set-list'
+        ? {
+            ...dropTarget,
+            index: resolveStoredSetDropIndex(fullSets, visibleSets, dropTarget.index),
+          }
+        : dropTarget;
+    const reorderedSets = applyDragReorder(fullSets, data.dragItem, storedDropTarget);
     const nextSets =
       data.dragItem.type === 'set'
         ? reorderedSets
