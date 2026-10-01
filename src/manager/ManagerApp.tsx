@@ -61,7 +61,7 @@ import {
   toggleGroupLockWithPropagation,
   toggleTabLockWithPropagation,
 } from './lockState';
-import { cleanupHistorySet } from './restoreCleanup';
+import { removeRestoredTabsFromHistorySets } from './restoreCleanup';
 import { resolveRestoreTarget } from './restoreTarget';
 import { removeSetsEmptiedSince } from './setCleanup';
 import { matchesExpectedUrl } from './urlMatch';
@@ -2251,13 +2251,11 @@ export function ManagerApp() {
       if (removeRestoredTabsEnabled) {
         const updated = await updateState((current) => ({
           ...current,
-          historySets: current.historySets.flatMap((item) => {
-            if (item.id !== targetSet.id) {
-              return [item];
-            }
-            const cleaned = cleanupHistorySet(item, restoredTabs, { pruneEmptyGroups: true });
-            return cleaned.tabs.length === 0 ? [] : [cleaned];
-          }),
+          historySets: removeRestoredTabsFromHistorySets(
+            current.historySets,
+            targetSet.id,
+            restoredTabs,
+          ),
         }));
         await refreshState(updated.historySets);
       }
@@ -2310,13 +2308,11 @@ export function ManagerApp() {
       if (removeRestoredTabsEnabled) {
         const updated = await updateState((current) => ({
           ...current,
-          historySets: current.historySets.flatMap((item) => {
-            if (item.id !== targetSet.id) {
-              return [item];
-            }
-            const cleaned = cleanupHistorySet(item, restoredTabs);
-            return cleaned.tabs.length === 0 ? [] : [cleaned];
-          }),
+          historySets: removeRestoredTabsFromHistorySets(
+            current.historySets,
+            targetSet.id,
+            restoredTabs,
+          ),
         }));
         await refreshState(updated.historySets);
       }
@@ -2351,13 +2347,7 @@ export function ManagerApp() {
       if (removeRestoredTabsEnabled) {
         const updated = await updateState((current) => ({
           ...current,
-          historySets: current.historySets.flatMap((item) => {
-            if (item.id !== setId) {
-              return [item];
-            }
-            const cleaned = cleanupHistorySet(item, restoredTabs);
-            return cleaned.tabs.length === 0 ? [] : [cleaned];
-          }),
+          historySets: removeRestoredTabsFromHistorySets(current.historySets, setId, restoredTabs),
         }));
         await refreshState(updated.historySets);
       }
