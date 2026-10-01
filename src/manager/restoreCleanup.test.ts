@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { cleanupHistorySet } from './restoreCleanup';
+import { cleanupHistorySet, removeRestoredTabsFromHistorySets } from './restoreCleanup';
 import type { HistorySet, TabSnapshot } from '../tab-manager/types';
 import { buildLayoutFromData } from '../tab-manager/layout';
 
@@ -222,5 +222,48 @@ describe('cleanupHistorySet', () => {
     const result = cleanupHistorySet(setWithDuplicateKey, [setWithDuplicateKey.tabs[0]!]);
 
     expect(result.tabs.map((tab) => tab.uid)).toEqual(['dup-b']);
+  });
+});
+
+describe('removeRestoredTabsFromHistorySets', () => {
+  const otherSet: HistorySet = { ...sampleSet, id: 'set-2' };
+
+  it('グループ内の全タブを復元した場合は空になったグループを削除する', () => {
+    const restored = sampleSet.tabs.filter((tab) => tab.groupId === 1);
+
+    const result = removeRestoredTabsFromHistorySets([sampleSet], sampleSet.id, restored);
+
+    expect(result).toHaveLength(1);
+    expect(result[0]!.groups.map((group) => group.uid)).toEqual(['g-2']);
+    expect(result[0]!.layout.map((item) => `${item.type}:${item.uid}`)).toEqual([
+      'tab:t-3',
+      'group:g-2',
+    ]);
+  });
+
+  it('グループ内の最後のタブを個別に復元した場合も空になったグループを削除する', () => {
+    const restored = sampleSet.tabs.filter((tab) => tab.uid === 't-4');
+
+    const result = removeRestoredTabsFromHistorySets([sampleSet], sampleSet.id, restored);
+
+    expect(result[0]!.groups.map((group) => group.uid)).toEqual(['g-1']);
+  });
+
+  it('対象外のセットは変更しない', () => {
+    const restored = sampleSet.tabs.filter((tab) => tab.groupId === 1);
+
+    const result = removeRestoredTabsFromHistorySets([sampleSet, otherSet], sampleSet.id, restored);
+
+    expect(result[1]).toBe(otherSet);
+  });
+
+  it('タブが残らなくなったセットは削除する', () => {
+    const result = removeRestoredTabsFromHistorySets(
+      [sampleSet, otherSet],
+      sampleSet.id,
+      sampleSet.tabs,
+    );
+
+    expect(result).toEqual([otherSet]);
   });
 });

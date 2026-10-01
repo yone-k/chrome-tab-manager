@@ -38,3 +38,17 @@ export function cleanupHistorySet(
     layout: normalizeLayout(set.layout, remainingGroups, remainingTabs),
   });
 }
+
+export function removeRestoredTabsFromHistorySets(
+  historySets: HistorySet[],
+  setId: string,
+  restoredTabs: TabSnapshot[],
+): HistorySet[] {
+  return historySets.flatMap((item) => {
+    if (item.id !== setId) {
+      return [item];
+    }
+    const cleaned = cleanupHistorySet(item, restoredTabs, { pruneEmptyGroups: true });
+    return cleaned.tabs.length === 0 ? [] : [cleaned];
+  });
+}
